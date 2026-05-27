@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TV Launcher</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0c10;
+    --bg2:       #13151d;
+    --bg3:       #1a1c28;
+    --border:    #1f2334;
+    --border2:   #2d3249;
+    --text:      #e8eaf0;
+    --text2:     #9ca3af;
+    --text3:     #4b5563;
+    --accent:    #6366f1;
+    --accent-glow: rgba(99,102,241,0.25);
+    --focus-ring: 0 0 0 2px var(--accent), 0 0 28px var(--accent-glow);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ─── Background atmosphere ─── */
+  body::before {
+    content: '';
+    position: fixed; top: -150px; left: -100px;
+    width: 500px; height: 400px;
+    background: radial-gradient(ellipse, rgba(99,102,241,0.10) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed; bottom: -100px; right: -80px;
+    width: 400px; height: 300px;
+    background: radial-gradient(ellipse, rgba(20,184,166,0.07) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  #app {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column;
+    height: 100vh;
+    padding: 40px 56px 28px;
+    gap: 0;
+  }
+
+  /* ─── Top bar ─── */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 32px;
+    flex-shrink: 0;
+  }
+
+  .greeting {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(24px, 3vw, 38px);
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .greeting .name { color: var(--accent); }
+
+  .topright {
+    text-align: right;
+    line-height: 1.4;
+  }
+  #clock {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 4vw, 48px);
+    font-weight: 700;
+    color: #c7d2fe;
+    display: block;
+    letter-spacing: -1px;
+  }
+  #dateline {
+    font-size: 13px;
+    color: var(--text3);
+  }
+
+  /* ─── Search ─── */
+  .search-wrap {
+    position: relative;
+    margin-bottom: 28px;
+    flex-shrink: 0;
+  }
+  .search-icon {
+    position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+    font-size: 18px; color: var(--text3); pointer-events: none;
+  }
+  #search {
+    width: 100%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px 12px 46px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #search::placeholder { color: var(--text3); }
+  #search:focus { border-color: var(--accent); }
+
+  /* ─── Section label ─── */
+  .section-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+
+  /* ─── Tiles grid ─── */
+  #tiles-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 6), 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-shrink: 0;
+  }
+
+  .tile {
+    position: relative;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 14px 14px;
+    cursor: pointer;
+    outline: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 90px;
+    transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    border-top: 2px solid var(--tile-accent, var(--border));
+  }
+
+  .tile:hover {
+    transform: scale(1.04);
+    border-color: var(--tile-accent, var(--accent));
+    background: var(--bg3);
+  }
+
+  .tile.focused {
+    transform: scale(1.06);
+    border-color: var(--accent);
+    background: var(--bg3);
+    box-shadow: var(--focus-ring);
+    z-index: 2;
+  }
+
+  .tile.launching {
+    animation: launch-pulse 0.4s ease;
+  }
+  @keyframes launch-pulse {
+    0%   { transform: scale(1.06); background: var(--bg3); }
+    40%  { transform: scale(1.10); background: #1e1b4b; border-color: #818cf8; }
+    100% { transform: scale(1.06); }
+  }
+
+  .tile-icon { font-size: 28px; margin-bottom: 10px; line-height: 1; }
+  .tile-name {
+    font-size: 12px; font-weight: 500;
+    color: #d1d5db; line-height: 1.3;
+  }
+
+  .tile-badge {
+    position: absolute; top: 8px; right: 8px;
+    font-size: 9px; padding: 2px 6px;
+    border-radius: 20px; font-weight: 500;
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .badge-new    { background: #1d4ed8; color: #bfdbfe; }
+  .badge-hot    { background: #7c2d12; color: #fed7aa; }
+  .badge-update { background: #064e3b; color: #6ee7b7; }
+
+  /* ─── Recents ─── */
+  #recents-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .recent-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px; color: var(--text2);
+    cursor: pointer; outline: none;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .recent-pill:hover { border-color: var(--accent); color: var(--text); }
+  .recent-pill.focused {
+    border-color: var(--accent);
+    color: var(--text);
+    box-shadow: var(--focus-ring);
+  }
+  .recent-pill .rp-icon { font-size: 16px; }
+
+  /* ─── Status bar ─── */
+  .statusbar {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .nav-hints {
+    display: flex; gap: 16px;
+    font-size: 11px; color: var(--text3);
+  }
+  .hint { display: flex; align-items: center; gap: 5px; }
+  .key {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 10px; color: #6b7280;
+  }
+
+  .sys-status {
+    display: flex; gap: 20px;
+    font-size: 11px; color: var(--text3);
+  }
+  .sys-dot {
+    display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22c55e; margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  /* ─── Toast ─── */
+  #toast {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 13px; color: var(--text2);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 100;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ─── No results ─── */
+  #no-results {
+    display: none;
+    text-align: center;
+    color: var(--text3);
+    font-size: 14px;
+    padding: 24px 0;
+    grid-column: 1/-1;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar">
+    <div class="greeting">Good <span id="timeofday">evening</span>, <span class="name" id="username">—</span></div>
+    <div class="topright">
+      <span id="clock">--:--</span>
+      <span id="dateline">Loading…</span>
+    </div>
+  </div>
+
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="search" placeholder="Search apps…" autocomplete="off" spellcheck="false" />
+  </div>
+
+  <div class="section-label" id="apps-label">Apps</div>
+  <div id="tiles-grid" role="grid" aria-label="Application launcher"></div>
+
+  <div class="section-label">Recently used</div>
+  <div id="recents-row"></div>
+
+  <div class="statusbar">
+    <div class="nav-hints">
+      <span class="hint"><span class="key">↑↓←→</span> Navigate</span>
+      <span class="hint"><span class="key">Enter</span> Launch</span>
+      <span class="hint"><span class="key">Esc</span> Search</span>
+      <span class="hint"><span class="key">🎮</span> Gamepad</span>
+    </div>
+    <div class="sys-status">
+      <span id="net-stat"><span class="sys-dot"></span>Network</span>
+      <span id="cpu-stat">CPU —%</span>
+      <span id="time-stat"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BRIDGE = 'http://127.0.0.1:9234';
+let allApps = [];
+let config = {};
+let focusIdx = -1;
+let focusZone = 'grid'; // 'grid' | 'recents'
+let cols = 6;
+
+// ─── Load config from bridge server ───────────────────────────
+async function loadConfig() {
+  try {
+    const res = await fetch(`${BRIDGE}/apps`);
+    const data = await res.json();
+    config = data;
+    allApps = data.apps || [];
+    cols = data.settings?.columns || 6;
+    document.documentElement.style.setProperty('--cols', cols);
+    document.getElementById('username').textContent = data.settings?.username || 'User';
+    renderTiles(allApps);
+    renderRecents(data.recents || []);
+  } catch (e) {
+    showToast('Could not reach bridge server. Is server.py running?');
+    // Fallback: show placeholder tiles
+    allApps = [{ name: 'Bridge offline', icon: '⚠️', cmd: '', accent: '#ef4444' }];
+    renderTiles(allApps);
+  }
+}
+
+// ─── Render ────────────────────────────────────────────────────
+function renderTiles(apps) {
+  const grid = document.getElementById('tiles-grid');
+  grid.innerHTML = '';
+  if (!apps.length) {
+    grid.innerHTML = '<div id="no-results" style="display:block">No apps found</div>';
+    return;
+  }
+  apps.forEach((app, i) => {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.setAttribute('tabindex', '0');
+    tile.setAttribute('role', 'gridcell');
+    tile.setAttribute('aria-label', app.name);
+    tile.style.setProperty('--tile-accent', app.accent || 'var(--border)');
+    tile.dataset.idx = i;
+    tile.dataset.cmd = app.cmd;
+    tile.dataset.name = app.name;
+    const badgeMap = { hot: 'badge-hot', new: 'badge-new', update: 'badge-update' };
+    tile.innerHTML = `
+      <div class="tile-icon">${app.icon || '📦'}</div>
+      <div class="tile-name">${app.name}</div>
+      ${app.badge ? `<span class="tile-badge ${badgeMap[app.badge] || ''}">${app.badge}</span>` : ''}
+    `;
+    tile.addEventListener('click', () => launchApp(app, tile));
+    tile.addEventListener('focus', () => { focusZone = 'grid'; focusIdx = i; highlightTile(i); });
+    grid.appendChild(tile);
+  });
+}
+
+function renderRecents(recentNames) {
+  const row = document.getElementById('recents-row');
+  row.innerHTML = '';
+  const recentApps = recentNames
+    .map(name => allApps.find(a => a.name === name))
+    .filter(Boolean);
+  recentApps.forEach((app, i) => {
+    const pill = document.createElement('div');
+    pill.className = 'recent-pill';
+    pill.setAttribute('tabindex', '0');
+    pill.dataset.name = app.name;
+    pill.innerHTML = `<span class="rp-icon">${app.icon || '📦'}</span>${app.name}`;
+    pill.addEventListener('click', () => launchApp(app, pill));
+    pill.addEventListener('focus', () => { focusZone = 'recents'; focusIdx = i; highlightRecent(i); });
+    row.appendChild(pill);
+  });
+}
+
+// ─── Launch ────────────────────────────────────────────────────
+async function launchApp(app, el) {
+  if (!app.cmd) return;
+  el.classList.add('launching');
+  setTimeout(() => el.classList.remove('launching'), 500);
+  showToast(`Launching ${app.name}…`);
+  updateRecents(app.name);
+  try {
+    await fetch(`${BRIDGE}/launch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd: app.cmd })
+    });
+  } catch (e) {
+    showToast(`Error: could not reach bridge server`);
+  }
+}
+
+function updateRecents(name) {
+  const current = config.recents || [];
+  const next = [name, ...current.filter(n => n !== name)].slice(0, 8);
+  config.recents = next;
+  renderRecents(next);
+  fetch(`${BRIDGE}/update-recents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recents: next })
+  }).catch(() => {});
+}
+
+// ─── Toast ─────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── Clock ─────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  document.getElementById('clock').textContent =
+    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  document.getElementById('timeofday').textContent = part;
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('dateline').textContent =
+    `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
+  document.getElementById('time-stat').textContent =
+    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+updateClock();
+setInterval(updateClock, 15000);
+
+// ─── Search ────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim();
+  const filtered = q ? allApps.filter(a => a.name.toLowerCase().includes(q)) : allApps;
+  renderTiles(filtered);
+  focusIdx = -1;
+  document.getElementById('apps-label').textContent =
+    q ? `Results for "${q}"` : 'Apps';
+});
+
+// ─── Focus helpers ─────────────────────────────────────────────
+function getTiles() { return [...document.querySelectorAll('.tile')]; }
+function getPills() { return [...document.querySelectorAll('.recent-pill')]; }
+
+function clearFocus() {
+  getTiles().forEach(t => t.classList.remove('focused'));
+  getPills().forEach(p => p.classList.remove('focused'));
+}
+
+function highlightTile(idx) {
+  clearFocus();
+  const tiles = getTiles();
+  if (idx >= 0 && idx < tiles.length) {
+    tiles[idx].classList.add('focused');
+    tiles[idx].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function highlightRecent(idx) {
+  clearFocus();
+  const pills = getPills();
+  if (idx >= 0 && idx < pills.length) {
+    pills[idx].classList.add('focused');
+  }
+}
+
+// ─── Keyboard navigation ───────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const tiles = getTiles();
+  const pills = getPills();
+  const search = document.getElementById('search');
+
+  if (e.key === 'Escape') {
+    clearFocus(); focusIdx = -1; focusZone = 'grid';
+    search.focus(); return;
+  }
+
+  // If typing, redirect to search
+  if (document.activeElement !== search &&
+      e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    search.focus();
+    return;
+  }
+
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter'].includes(e.key)) {
+    e.preventDefault();
+  } else return;
+
+  if (e.key === 'Enter') {
+    if (focusZone === 'grid' && focusIdx >= 0 && focusIdx < tiles.length) {
+      tiles[focusIdx].click();
+    } else if (focusZone === 'recents' && focusIdx >= 0 && focusIdx < pills.length) {
+      pills[focusIdx].click();
+    }
+    return;
+  }
+
+  if (focusZone === 'grid' || focusIdx === -1) {
+    let next = focusIdx;
+    const total = tiles.length;
+    if (focusIdx === -1) { next = 0; }
+    else if (e.key === 'ArrowRight') next = Math.min(focusIdx + 1, total - 1);
+    else if (e.key === 'ArrowLeft')  next = Math.max(focusIdx - 1, 0);
+    else if (e.key === 'ArrowDown') {
+      if (focusIdx + cols < total) next = focusIdx + cols;
+      else if (pills.length) { focusZone = 'recents'; focusIdx = 0; highlightRecent(0); return; }
+    }
+    else if (e.key === 'ArrowUp') next = focusIdx - cols >= 0 ? focusIdx - cols : focusIdx;
+    focusZone = 'grid'; focusIdx = next; highlightTile(next);
+  } else {
+    // recents row
+    if (e.key === 'ArrowRight') { focusIdx = Math.min(focusIdx + 1, pills.length - 1); highlightRecent(focusIdx); }
+    else if (e.key === 'ArrowLeft') { focusIdx = Math.max(focusIdx - 1, 0); highlightRecent(focusIdx); }
+    else if (e.key === 'ArrowUp') {
+      focusZone = 'grid';
+      const tileRow = Math.floor((getTiles().length - 1) / cols) * cols;
+      focusIdx = Math.min(tileRow + focusIdx, getTiles().length - 1);
+      highlightTile(focusIdx);
+    }
+    else if (e.key === 'ArrowDown') { /* already at bottom */ }
+  }
+});
+
+// ─── Gamepad support ───────────────────────────────────────────
+const gpState = { axes: [0,0,0,0], buttons: Array(17).fill(false), axisDelay: 0 };
+const GP_REPEAT_MS = 200;
+
+function pollGamepad() {
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = [...gps].find(g => g);
+  if (!gp) { requestAnimationFrame(pollGamepad); return; }
+
+  const now = Date.now();
+  const fire = (key) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+
+  // D-pad (buttons 12-15) and left stick (axes 0-1)
+  const up    = gp.buttons[12]?.pressed || gp.axes[1] < -0.5;
+  const down  = gp.buttons[13]?.pressed || gp.axes[1] >  0.5;
+  const left  = gp.buttons[14]?.pressed || gp.axes[0] < -0.5;
+  const right = gp.buttons[15]?.pressed || gp.axes[0] >  0.5;
+  const enter = gp.buttons[0]?.pressed;  // A / Cross
+  const esc   = gp.buttons[1]?.pressed;  // B / Circle
+
+  const anyDir = up || down || left || right;
+
+  if (anyDir && now > gpState.axisDelay) {
+    if (up)    fire('ArrowUp');
+    if (down)  fire('ArrowDown');
+    if (left)  fire('ArrowLeft');
+    if (right) fire('ArrowRight');
+    gpState.axisDelay = now + GP_REPEAT_MS;
+  }
+  if (!anyDir) gpState.axisDelay = 0;
+
+  if (enter && !gpState.buttons[0]) fire('Enter');
+  if (esc   && !gpState.buttons[1]) fire('Escape');
+  gpState.buttons[0] = enter;
+  gpState.buttons[1] = esc;
+
+  requestAnimationFrame(pollGamepad);
+}
+requestAnimationFrame(pollGamepad);
+
+// ─── Fake sys stats (replace with real endpoints if desired) ───
+let fakeCpu = 12;
+setInterval(() => {
+  fakeCpu = Math.max(4, Math.min(70, fakeCpu + (Math.random() * 8 - 4)));
+  document.getElementById('cpu-stat').textContent = `CPU ${Math.round(fakeCpu)}%`;
+}, 4000);
+
+// ─── Boot ──────────────────────────────────────────────────────
+loadConfig();
+</script>
+</body>
+</html>

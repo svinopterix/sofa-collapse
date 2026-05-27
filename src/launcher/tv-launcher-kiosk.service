@@ -1,0 +1,26 @@
+[Unit]
+Description=TV Launcher Chromium Kiosk
+After=tv-launcher-bridge.service graphical-session.target
+Requires=tv-launcher-bridge.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 2
+ExecStart=/usr/bin/chromium-browser \
+  --kiosk \
+  --app=http://127.0.0.1:9234 \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --disable-features=TranslateUI \
+  --no-first-run \
+  --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --check-for-update-interval=31536000
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+
+[Install]
+WantedBy=graphical-session.target
