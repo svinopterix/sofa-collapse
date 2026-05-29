@@ -47,7 +47,16 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   wl-clipboard \
   python3 \
   jq curl wget gnupg ca-certificates apt-transport-https \
-  fonts-noto-core fonts-noto-color-emoji
+  fonts-noto-core fonts-noto-color-emoji \
+  pipewire pipewire-pulse pipewire-audio wireplumber pavucontrol pulseaudio-utils
+
+# A minimal Sway install ships no sound server, so launched apps (Spotify, Emby)
+# have nothing to play through. Enable the PipeWire user services so they start
+# with the sofa session. Run as the user (NOT via sudo) so they land in the
+# right systemd --user instance; harmless if already enabled.
+log "Enabling PipeWire user audio services"
+systemctl --user enable --now pipewire pipewire-pulse wireplumber 2>/dev/null \
+  || warn "Could not enable PipeWire user services now (no user session?); they are enabled and will start on next login."
 
 # --- 2. Chromium (snap) — also used as the kiosk shell ----------------------
 # Ubuntu's chromium is a snap; the snap command is `chromium`. The launcher
