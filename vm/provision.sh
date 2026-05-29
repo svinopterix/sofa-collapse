@@ -43,6 +43,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   xwayland \
   foot \
   grim \
+  wev \
   wl-clipboard \
   python3 \
   jq curl wget gnupg ca-certificates apt-transport-https \
@@ -138,6 +139,19 @@ exec chromium \
 KIOSK
 chmod +x "$LAUNCHER_DST/start-kiosk.sh"
 
+# "Go home" action, bound to the remote's Home button in the Sway config below.
+# Brings the launcher kiosk back to the front and fullscreens it, covering
+# whatever app is currently showing. The launched app keeps running in the
+# background — same as a TV/Android Home button. The kiosk is matched by its
+# page <title> ("TV Launcher" in index.html), which is stable regardless of the
+# window's Wayland app_id, so this also works when a Chromium-based web app
+# (which shares app_id "chromium") happens to be the foreground window.
+cat > "$LAUNCHER_DST/go-home.sh" <<'GOHOME'
+#!/usr/bin/env bash
+exec swaymsg '[title="TV Launcher"] focus, fullscreen enable'
+GOHOME
+chmod +x "$LAUNCHER_DST/go-home.sh"
+
 # --- 7. Sway config: run the kiosk, hide cursor, easy exit ------------------
 log "Writing Sway config"
 mkdir -p "$SWAY_CFG_DIR"
@@ -151,10 +165,26 @@ seat * hide_cursor 2000
 
 # Make the kiosk fill the screen with no decorations.
 default_border none
-for_window [app_id="chromium"] fullscreen enable
+
+# Open every top-level app window fullscreen. The kiosk (Chromium) runs
+# fullscreen, and in Sway a fullscreen window stays on top of its output — so
+# an app launched from the kiosk would otherwise open *behind* it (focused but
+# hidden). Fullscreening each new window brings the launched app to the
+# foreground; when it closes, Chromium is the sole remaining window and fills
+# the screen again. First rule covers Wayland (xdg-shell) apps, second covers
+# Xwayland apps (which have no app_id).
+for_window [app_id=".+"] fullscreen enable
+for_window [shell="xwayland"] fullscreen enable
 
 # Launch the launcher kiosk on Sway start.
 exec "\$HOME/launcher/start-kiosk.sh"
+
+# Remote control keys.
+# i25 Mini "Home" button -> back to the launcher home screen. These remotes
+# emit the Android Home key as XF86HomePage (Linux KEY_HOMEPAGE). If your unit
+# sends a different key, run \`wev\` over SSH, press Home, and replace the keysym
+# below (then \`swaymsg reload\`). \`wev\` also lets you map Back/Menu/etc. later.
+bindsym XF86HomePage exec "\$HOME/launcher/go-home.sh"
 
 # Escape hatches for testing.
 bindsym \$mod+Shift+e exit
