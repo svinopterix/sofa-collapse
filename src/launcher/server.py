@@ -15,7 +15,9 @@ from pathlib import Path
 
 PORT = 9234
 LAUNCHER_DIR = Path(__file__).parent.resolve()
-APPS_JSON = LAUNCHER_DIR / "apps.json"
+# Apps file defaults to apps.json next to this script. Override with the
+# LAUNCHER_APPS env var (e.g. apps.dev.json) for local/VM testing.
+APPS_JSON = Path(os.environ.get("LAUNCHER_APPS", LAUNCHER_DIR / "apps.json"))
 
 class LauncherHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):

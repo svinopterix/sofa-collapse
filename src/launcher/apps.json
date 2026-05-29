@@ -5,24 +5,10 @@
     "accent_color": "#6366f1"
   },
   "apps": [
-    { "name": "Firefox",     "icon": "🦊", "cmd": "firefox",                "accent": "#f59e0b", "badge": null },
-    { "name": "Terminal",    "icon": "⬛", "cmd": "x-terminal-emulator",    "accent": "#22c55e", "badge": null },
-    { "name": "Files",       "icon": "📁", "cmd": "thunar",                 "accent": "#38bdf8", "badge": null },
-    { "name": "Kodi",        "icon": "🎬", "cmd": "kodi",                   "accent": "#a78bfa", "badge": "hot" },
-    { "name": "Plex",        "icon": "🎞️", "cmd": "flatpak run tv.plex.PlexDesktop", "accent": "#818cf8", "badge": null },
-    { "name": "Spotify",     "icon": "🎵", "cmd": "spotify",                "accent": "#22c55e", "badge": null },
-    { "name": "Steam",       "icon": "🎮", "cmd": "steam",                  "accent": "#38bdf8", "badge": "update" },
-    { "name": "RetroArch",   "icon": "🕹️", "cmd": "retroarch",              "accent": "#ec4899", "badge": null },
-    { "name": "VLC",         "icon": "🔶", "cmd": "vlc",                    "accent": "#f59e0b", "badge": null },
-    { "name": "Photos",      "icon": "🖼️", "cmd": "shotwell",               "accent": "#14b8a6", "badge": null },
-    { "name": "YouTube DL",  "icon": "⬇️", "cmd": "yt-dlp-gui",             "accent": "#ef4444", "badge": "new" },
-    { "name": "Discord",     "icon": "💬", "cmd": "discord",                "accent": "#818cf8", "badge": null },
-    { "name": "OBS",         "icon": "📡", "cmd": "obs",                    "accent": "#ef4444", "badge": null },
-    { "name": "Jellyfin",    "icon": "🎯", "cmd": "flatpak run com.github.iwalton3.jellyfin-media-player", "accent": "#14b8a6", "badge": null },
-    { "name": "Moonlight",   "icon": "🌙", "cmd": "moonlight",              "accent": "#818cf8", "badge": null },
-    { "name": "Calculator",  "icon": "🔢", "cmd": "gnome-calculator",       "accent": "#38bdf8", "badge": null },
-    { "name": "Text Editor", "icon": "📝", "cmd": "gedit",                  "accent": "#a78bfa", "badge": null },
-    { "name": "Settings",    "icon": "⚙️", "cmd": "gnome-control-center",   "accent": "#38bdf8", "badge": null }
+    { "name": "Chromium", "icon": "🌐", "cmd": "chromium-browser", "accent": "#38bdf8", "badge": null },
+    { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null },
+    { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null },
+    { "name": "Emby",     "icon": "🎬", "cmd": "emby-theater",     "accent": "#52b54b", "badge": null }
   ],
-  "recents": ["Kodi", "Firefox", "Terminal", "Plex", "Steam"]
+  "recents": ["Emby", "Spotify", "Chromium"]
 }
