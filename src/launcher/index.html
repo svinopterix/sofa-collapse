@@ -131,7 +131,7 @@
   #tiles-grid {
     display: grid;
     grid-template-columns: repeat(var(--cols, 6), 1fr);
-    gap: 10px;
+    gap: 20px;
     margin-bottom: 20px;
     flex-shrink: 0;
   }
@@ -140,14 +140,14 @@
     position: relative;
     background: var(--bg2);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 18px 14px 14px;
+    border-radius: 14px;
+    padding: 36px 28px 28px;
     cursor: pointer;
     outline: none;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    min-height: 90px;
+    min-height: 180px;
     transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
     border-top: 2px solid var(--tile-accent, var(--border));
   }
@@ -175,9 +175,9 @@
     100% { transform: scale(1.06); }
   }
 
-  .tile-icon { font-size: 28px; margin-bottom: 10px; line-height: 1; }
+  .tile-icon { font-size: 56px; margin-bottom: 20px; line-height: 1; }
   .tile-name {
-    font-size: 12px; font-weight: 500;
+    font-size: 24px; font-weight: 500;
     color: #d1d5db; line-height: 1.3;
   }
 
@@ -282,7 +282,7 @@
 
 <div id="app">
   <div class="topbar">
-    <div class="greeting">Good <span id="timeofday">evening</span>, <span class="name" id="username">—</span></div>
+    <div class="greeting">Sofa collapsed, <span class="name">your brain liquidified</span></div>
     <div class="topright">
       <span id="clock">--:--</span>
       <span id="dateline">Loading…</span>
@@ -334,7 +334,6 @@ async function loadConfig() {
     allApps = data.apps || [];
     cols = data.settings?.columns || 6;
     document.documentElement.style.setProperty('--cols', cols);
-    document.getElementById('username').textContent = data.settings?.username || 'User';
     renderTiles(allApps);
     renderRecents(data.recents || []);
   } catch (e) {
@@ -439,8 +438,6 @@ function updateClock() {
   const h = now.getHours(), m = now.getMinutes();
   document.getElementById('clock').textContent =
     `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-  document.getElementById('timeofday').textContent = part;
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('dateline').textContent =

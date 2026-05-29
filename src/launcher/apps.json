@@ -1,14 +1,14 @@
 {
   "settings": {
     "username": "Alex",
-    "columns": 6,
+    "columns": 3,
     "accent_color": "#6366f1"
   },
   "apps": [
-    { "name": "Chromium", "icon": "🌐", "cmd": "chromium-browser", "accent": "#38bdf8", "badge": null },
+    { "name": "YouTube",  "icon": "📺", "cmd": "chromium --kiosk --app=https://www.youtube.com --ozone-platform=wayland", "accent": "#ff0000", "badge": null },
     { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null },
     { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null },
     { "name": "Emby",     "icon": "🎬", "cmd": "emby-theater",     "accent": "#52b54b", "badge": null }
   ],
-  "recents": ["Emby", "Spotify", "Chromium"]
+  "recents": ["Emby", "Spotify", "YouTube"]
 }
