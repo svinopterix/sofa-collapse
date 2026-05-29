@@ -24,11 +24,11 @@ LAUNCHER_SRC="$REPO_ROOT/src/launcher"
 LAUNCHER_DST="$HOME/launcher"
 SWAY_CFG_DIR="$HOME/.config/sway"
 
-# Emby Theater is not in Ubuntu's repos. We fetch the latest .deb from GitHub
-# releases. If the asset layout changes, override this repo or set EMBY_DEB_URL
-# directly to a known-good .deb URL before running.
+# Emby Theater is not in Ubuntu's repos. We install a known-good .deb from
+# GitHub releases. Override EMBY_DEB_URL to pin a different build, or set it
+# empty (and adjust EMBY_GH_REPO) to fall back to auto-discovery.
 EMBY_GH_REPO="${EMBY_GH_REPO:-MediaBrowser/Emby.Releases}"
-EMBY_DEB_URL="${EMBY_DEB_URL:-}"
+EMBY_DEB_URL="${EMBY_DEB_URL:-https://github.com/MediaBrowser/emby-theater-electron/releases/download/3.0.21/emby-theater-deb_3.0.21_amd64.deb}"
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m[warn] %s\033[0m\n' "$*" >&2; }
@@ -191,7 +191,22 @@ bindsym \$mod+Shift+e exit
 bindsym \$mod+Return exec foot
 SWAY
 
-# --- 8. Auto-start Sway on tty1 login ---------------------------------------
+# --- 8. Auto-login on tty1 --------------------------------------------------
+# No display manager (lightdm) on this Wayland path — the kiosk is brought up by
+# the .bash_profile hook below, which only fires after a tty1 login shell. Drop
+# in a getty override so tty1 logs this user in automatically (no password
+# prompt); the hook then exec's Sway. agetty's --autologin needs the username,
+# which is whoever runs provision.sh (the "sofa" user on the box).
+log "Configuring auto-login on tty1 for user '$USER'"
+sudo install -d /etc/systemd/system/getty@tty1.service.d
+sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf >/dev/null <<AUTOLOGIN
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
+AUTOLOGIN
+sudo systemctl daemon-reload
+
+# --- 9. Auto-start Sway on tty1 login ---------------------------------------
 log "Configuring Sway auto-start on tty1"
 PROFILE="$HOME/.bash_profile"
 MARKER="# >>> tv-launcher sway autostart >>>"
@@ -208,6 +223,6 @@ AUTOSTART
 fi
 
 log "Done."
-echo "  • Interactive: log out/in on tty1 (or reboot) — Sway starts the kiosk."
+echo "  • Interactive: reboot — tty1 auto-logs in '$USER' and Sway starts the kiosk (no password)."
 echo "  • Headless check: ./vm/test-launcher.sh  (writes a screenshot)"
 echo "  • Exit Sway: Mod+Shift+e   |   Open a terminal: Mod+Enter"
