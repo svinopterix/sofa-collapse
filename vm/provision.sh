@@ -89,6 +89,10 @@ if ! command -v emby-theater >/dev/null 2>&1; then
                 | select(endswith(".deb"))][0] // empty' 2>/dev/null || true)"
   fi
   if [ -n "$EMBY_DEB_URL" ]; then
+    # Emby Theater is an Electron app; its .deb doesn't always pull in the
+    # X screensaver lib it links against (libXss.so.1 -> libxss1), so install
+    # it explicitly to avoid a missing-shared-library crash on launch.
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libxss1
     tmp="$(mktemp --suffix=.deb)"
     curl -fSL "$EMBY_DEB_URL" -o "$tmp"
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp"

@@ -27,7 +27,25 @@ Key design point: the server uses CORS `Access-Control-Allow-Origin: null` becau
 
 ### Config: `src/launcher/apps.json`
 
-Single source of truth for the launcher. `settings` (username, columns, accent_color), `apps[]` (each: `name`, `icon` emoji, `cmd` shell string, `accent` color, optional `badge` of `hot`/`new`/`update`), and `recents[]` (app names). The `recents` array is rewritten by the server at runtime — edits there will be overwritten.
+Single source of truth for the launcher. `settings` (username, columns, accent_color), `apps[]` (each: `name`, `icon` emoji, `cmd` shell string, `accent` color, optional `badge` of `hot`/`new`/`update`, optional `match` Sway criteria for focus-or-launch), and `recents[]` (app names). The `recents` array is rewritten by the server at runtime — edits there will be overwritten.
+
+#### Focus-or-launch and `match` selectors
+
+`server.py`'s `POST /launch` does focus-or-launch: if an app object has a `match` criteria and a live Sway window matches, it raises + fullscreens that window (`swaymsg [<match>] focus, fullscreen enable`) instead of spawning a duplicate. Without a correct `match`, every launch piles up a new background window.
+
+Verified selectors against the live `swaymsg -t get_tree` on the media box (host 10.0.0.20, user `sofa`):
+
+| App | Runs under | `app_id` | Correct `match` |
+| --- | --- | --- | --- |
+| Spotify | Xwayland | `null` | `class="Spotify"` |
+| Emby Theater | Xwayland | `null` | `class="Emby Theater"` (title `"Emby"` is unstable; `app_id` is null — the old `app_id="emby-theater"` never matched) |
+| YouTube tile | Chromium `--app` | `chrome-www.youtube.com__-Default` | `app_id="chrome-www.youtube.com__-Default"` |
+| Google Chrome | — | `google-chrome` | `app_id="google-chrome"` |
+| Launcher kiosk | Chromium snap `--app` | `chrome-127.0.0.1__-Default` | matched by title `"TV Launcher"` in go-home.sh |
+
+Rule of thumb: **Xwayland apps have `app_id=null` — match them by `class=` (capitalized, with spaces), never `app_id`.** Chromium `--app=` pages get a distinct per-URL `app_id` (`chrome-<host>__-Default`), not the bare `chromium` app_id.
+
+**Focus-or-launch requires `SWAYSOCK` in the bridge's environment.** On a normal boot the bridge inherits it (Sway → `start-kiosk.sh` → `server.py`). Restarting the bridge from a plain SSH shell strips `SWAYSOCK` and silently breaks focus-or-launch (falls through to spawning a duplicate). To restart over SSH, relaunch through Sway: `swaymsg exec '~/launcher/start-kiosk.sh'`.
 
 ## Install & run
 
