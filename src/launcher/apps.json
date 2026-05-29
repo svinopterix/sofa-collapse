@@ -6,9 +6,9 @@
   },
   "apps": [
     { "name": "YouTube",  "icon": "📺", "cmd": "chromium --kiosk --app=https://www.youtube.com --ozone-platform=wayland", "accent": "#ff0000", "badge": null },
-    { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null },
-    { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null },
-    { "name": "Emby",     "icon": "🎬", "cmd": "emby-theater",     "accent": "#52b54b", "badge": null }
+    { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null, "match": "app_id=\"google-chrome\"" },
+    { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null, "match": "app_id=\"spotify\"" },
+    { "name": "Emby",     "icon": "🎬", "cmd": "emby-theater",     "accent": "#52b54b", "badge": null, "match": "app_id=\"emby-theater\"" }
   ],
   "recents": ["Emby", "Spotify", "YouTube"]
 }

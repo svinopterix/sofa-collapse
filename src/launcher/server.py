@@ -70,8 +70,19 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
             try:
                 req = json.loads(body)
                 cmd = req.get("cmd", "").strip()
+                match = req.get("match", "").strip()
                 if not cmd:
                     self._error("missing cmd")
+                    return
+                # Focus-or-launch: many apps (Spotify, browsers) are
+                # single-instance, so a second launch just hands off to the
+                # running process and exits without mapping a new window — which
+                # means Sway's "fullscreen on map" rule never fires and the
+                # window stays buried behind the kiosk. If a Sway match criteria
+                # is given and an existing window matches, raise+fullscreen it
+                # instead of spawning a duplicate.
+                if match and self._focus_window(match):
+                    self._ok({"status": "focused", "match": match})
                     return
                 # Launch detached so it outlives the server restart
                 subprocess.Popen(
@@ -100,6 +111,20 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
             return
 
         self._error("not found", 404)
+
+    def _focus_window(self, match):
+        """Try to focus + fullscreen an existing Sway window matching the given
+        criteria (e.g. 'app_id="spotify"'). Returns True only if swaymsg reports
+        the command succeeded against at least one node (i.e. a window existed)."""
+        try:
+            out = subprocess.run(
+                ["swaymsg", f'[{match}] focus, fullscreen enable'],
+                capture_output=True, text=True, timeout=2,
+            )
+            results = json.loads(out.stdout or "[]")
+            return bool(results) and all(r.get("success") for r in results)
+        except Exception:
+            return False
 
     def _ok(self, payload):
         body = json.dumps(payload).encode()
