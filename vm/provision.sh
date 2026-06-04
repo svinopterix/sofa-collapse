@@ -297,6 +297,16 @@ input "type:pointer" {
     pointer_accel $POINTER_ACCEL
 }
 
+# Stack windows instead of tiling them. Apps launched from the kiosk pile up as
+# siblings on one workspace; with the default tiled layout, the only thing
+# hiding the others is whichever window is fullscreen — so exiting fullscreen
+# (e.g. Spotify's own toggle) exposes a broken 2-3-way tile grid. Stacking keeps
+# exactly one window visible at all times, fullscreen or not: leaving fullscreen
+# falls back to a single stacked window (with a thin title bar) instead of a
+# tiled grid. With default_border none the title bar is the only chrome, and it
+# is never seen during normal use since launched apps are always fullscreened.
+workspace_layout stacking
+
 # Open every top-level app window fullscreen. The kiosk (Chromium) runs
 # fullscreen, and in Sway a fullscreen window stays on top of its output — so
 # an app launched from the kiosk would otherwise open *behind* it (focused but
