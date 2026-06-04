@@ -284,7 +284,22 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
 AUTOLOGIN
 sudo systemctl daemon-reload
 
-# --- 9. Auto-start Sway on tty1 login ---------------------------------------
+# --- 9. Don't block boot waiting for the network -----------------------------
+# *-wait-online ordering services hold up boot until every managed interface is
+# "online", timing out after 120s if one never comes up (e.g. an unplugged
+# ethernet port). Nothing here needs the network before login — the kiosk and
+# bridge are loopback-only (127.0.0.1:9234) — so disable+mask whichever
+# wait-online unit is present. Idempotent; ignores units that don't exist.
+log "Disabling network-wait services (they stall boot up to 120s)"
+for unit in systemd-networkd-wait-online.service NetworkManager-wait-online.service; do
+  if systemctl list-unit-files "$unit" >/dev/null 2>&1 \
+     && systemctl list-unit-files "$unit" | grep -q "$unit"; then
+    sudo systemctl disable "$unit" 2>/dev/null || true
+    sudo systemctl mask "$unit"    2>/dev/null || true
+  fi
+done
+
+# --- 10. Auto-start Sway on tty1 login --------------------------------------
 log "Configuring Sway auto-start on tty1"
 PROFILE="$HOME/.bash_profile"
 MARKER="# >>> tv-launcher sway autostart >>>"
