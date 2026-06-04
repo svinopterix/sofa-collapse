@@ -403,7 +403,7 @@ async function launchApp(app, el) {
     await fetch(`${BRIDGE}/launch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cmd: app.cmd, match: app.match || '' })
+      body: JSON.stringify({ name: app.name, cmd: app.cmd, match: app.match || '' })
     });
   } catch (e) {
     showToast(`Error: could not reach bridge server`);

@@ -19,6 +19,22 @@ LAUNCHER_DIR = Path(__file__).parent.resolve()
 # LAUNCHER_APPS env var (e.g. apps.dev.json) for local/VM testing.
 APPS_JSON = Path(os.environ.get("LAUNCHER_APPS", LAUNCHER_DIR / "apps.json"))
 
+# --- Global UI state --------------------------------------------------------
+# Tracks what the box is currently showing so behaviour can branch on it later.
+#   view == "HOME"  -> the launcher kiosk is in front (no app, or backgrounded)
+#   view == "APP"   -> a launched app is in front; STATE["app"] is its name
+# Updated on every user action: /launch and /home (the remote Home button, via
+# go-home.sh) both flow through here, plus a focus-or-launch counts as an APP.
+STATE = {"view": "HOME", "app": None}
+
+
+def set_state(view, app=None):
+    """Update the global UI state and log the transition."""
+    STATE["view"] = view
+    STATE["app"] = app
+    label = f"{view} ({app})" if app else view
+    print(f"[launcher] state -> {label}", file=sys.stderr)
+
 class LauncherHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[launcher] {fmt % args}", file=sys.stderr)
@@ -49,6 +65,11 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
                 self._error(str(e))
             return
 
+        # Report the current UI state (HOME / APP + app name)
+        if parsed.path == "/state":
+            self._ok(dict(STATE))
+            return
+
         # Serve the launcher HTML (for chromium --app=http://... mode)
         if parsed.path == "/" or parsed.path == "/index.html":
             index = (LAUNCHER_DIR / "index.html").read_bytes()
@@ -71,9 +92,12 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
                 req = json.loads(body)
                 cmd = req.get("cmd", "").strip()
                 match = req.get("match", "").strip()
+                name = req.get("name", "").strip()
                 if not cmd:
                     self._error("missing cmd")
                     return
+                # An app is now in front (whether focused or freshly spawned).
+                set_state("APP", name or cmd)
                 # Focus-or-launch: many apps (Spotify, browsers) are
                 # single-instance, so a second launch just hands off to the
                 # running process and exits without mapping a new window — which
@@ -94,6 +118,12 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
                 self._ok({"status": "launched", "cmd": cmd})
             except Exception as e:
                 self._error(str(e))
+            return
+
+        if parsed.path == "/home":
+            # The Home button (go-home.sh) brought the launcher to the front.
+            set_state("HOME")
+            self._ok(dict(STATE))
             return
 
         if parsed.path == "/update-recents":
