@@ -177,32 +177,78 @@ exec swaymsg '[title="TV Launcher"] focus, fullscreen enable'
 GOHOME
 chmod +x "$LAUNCHER_DST/go-home.sh"
 
-# State-aware Fast-Forward / Rewind, bound to the remote's FF / Rev buttons in
-# keybindings.yaml. Asks the bridge which app is in front (GET /state) and does
-# the natural thing for it; falls back to track-skip when the bridge is down or
-# the app is unknown. Needs playerctl (MPRIS) and wtype (key injection), both
-# installed above.
+# State-aware media keys (Play/Pause, Fast-Forward, Rewind) bound to the
+# remote's media buttons in keybindings.yaml. Routes each key to whatever app is
+# actually *on screen* and does the natural thing for it. Needs playerctl
+# (MPRIS), wtype (key injection) and swaymsg, all installed/present above.
 cat > "$LAUNCHER_DST/media-seek.sh" <<'SEEK'
 #!/usr/bin/env bash
-# Usage: media-seek.sh fwd|back
-#   YouTube  -> seek the video ±10s   (inject YouTube's l/j hotkeys via wtype)
-#   Spotify  -> next / previous track (MPRIS via playerctl)
-#   default  -> next / previous track (MPRIS via playerctl)
-dir="${1:-fwd}"
-app="$(curl -fsS -m 2 http://127.0.0.1:9234/state 2>/dev/null | jq -r '.app // ""')"
-case "$app" in
-  YouTube)
-    # YouTube web player hotkeys: 'l' = +10s, 'j' = -10s. wtype types the key
-    # into the focused (foreground) window.
-    if [ "$dir" = back ]; then wtype j; else wtype l; fi
-    ;;
-  Spotify)
-    if [ "$dir" = back ]; then playerctl --player=spotify previous; else playerctl --player=spotify next; fi
-    ;;
-  *)
-    if [ "$dir" = back ]; then playerctl previous; else playerctl next; fi
-    ;;
-esac
+# Usage: media-seek.sh playpause|fwd|back
+#
+# Routes a remote media key to whatever app is actually on screen, decided by
+# the *focused* Sway window. We deliberately do NOT use the bridge's /state:
+# /state tracks the last *launched* app and is blank (app=null) on HOME, so it
+# drifts from the window you're looking at. And a bare `playerctl play-pause`
+# (no --player) controls the first MPRIS player it lists -- usually
+# Chromium/YouTube -- so it'd pause YouTube even while Spotify is in front.
+#
+#   Spotify (Xwayland, class="Spotify")             -> playerctl --player=spotify
+#   YouTube (chromium --app, chrome-www.youtube..)  -> YouTube hotkeys via wtype
+#                                                      (k = play/pause, l = +10s,
+#                                                       j = -10s)
+#   anything else (launcher/HOME/unknown)           -> the MPRIS player that is
+#                                                      currently Playing, else
+#                                                      playerctl's default
+#
+# wtype needs WAYLAND_DISPLAY and swaymsg needs SWAYSOCK. A remote keybinding
+# normally inherits both from Sway, but derive them if missing so this also
+# works when invoked from a plain SSH shell.
+set -u
+action="${1:-playpause}"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+: "${WAYLAND_DISPLAY:=$(basename "$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1)" 2>/dev/null)}"
+export WAYLAND_DISPLAY
+: "${SWAYSOCK:=$(ls "$XDG_RUNTIME_DIR"/sway-ipc.* 2>/dev/null | head -1)}"
+export SWAYSOCK
+
+# Focused window. Xwayland apps (Spotify) have app_id=null and must be matched by
+# class; chromium --app pages carry a per-URL app_id. jq emits app_id then class
+# (one per line) for the focused node; head -2 guards against odd trees.
+mapfile -t f < <(swaymsg -t get_tree 2>/dev/null \
+  | jq -r '.. | objects | select(.focused==true) | (.app_id // "-"), (.window_properties.class // "-")' \
+  | head -2)
+focus_app_id="${f[0]:--}"; focus_class="${f[1]:--}"
+
+playing_player() {
+  # First MPRIS player reporting Playing; empty if none.
+  local p
+  while read -r p; do
+    [ "$(playerctl --player="$p" status 2>/dev/null)" = "Playing" ] && { printf '%s' "$p"; return; }
+  done < <(playerctl -l 2>/dev/null)
+}
+
+if [ "$focus_class" = "Spotify" ]; then
+  case "$action" in
+    playpause) playerctl --player=spotify play-pause ;;
+    fwd)       playerctl --player=spotify next ;;
+    back)      playerctl --player=spotify previous ;;
+  esac
+elif [ "$focus_app_id" = "chrome-www.youtube.com__-Default" ]; then
+  case "$action" in
+    playpause) wtype k ;;
+    fwd)       wtype l ;;
+    back)      wtype j ;;
+  esac
+else
+  p="$(playing_player)"
+  set -- ${p:+--player=$p}
+  case "$action" in
+    playpause) playerctl "$@" play-pause ;;
+    fwd)       playerctl "$@" next ;;
+    back)      playerctl "$@" previous ;;
+  esac
+fi
 SEEK
 chmod +x "$LAUNCHER_DST/media-seek.sh"
 

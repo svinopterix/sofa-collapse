@@ -43,13 +43,16 @@ bindings:
     command: exec "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
     comment: Mute toggle
 
-  # Play/Pause — toggle the active MPRIS player (Spotify, Emby, Chromium/YouTube).
+  # Play/Pause — routed through media-seek.sh so it targets the app that's
+  # actually on screen (focused Sway window), not whatever MPRIS player playerctl
+  # lists first (a bare `playerctl play-pause` grabs Chromium/YouTube even when
+  # Spotify is in front).
   - key: XF86AudioPlay
-    command: exec "playerctl play-pause"
+    command: exec "$HOME/launcher/media-seek.sh playpause"
     comment: Play / Pause (some remotes send XF86AudioPlayPause — check with wev)
 
-  # Fast-forward / Rewind are state-aware (media-seek.sh asks the bridge which
-  # app is in front): YouTube seeks ±10s, Spotify/everything else skips track.
+  # Fast-forward / Rewind are state-aware (media-seek.sh checks the focused
+  # window): YouTube seeks ±10s, Spotify/everything else skips track.
   - key: XF86AudioForward
     command: exec "$HOME/launcher/media-seek.sh fwd"
     comment: Fast-forward (seek/next, app-dependent)
