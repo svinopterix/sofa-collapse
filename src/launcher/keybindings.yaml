@@ -53,12 +53,23 @@ bindings:
 
   # Fast-forward / Rewind are state-aware (media-seek.sh checks the focused
   # window): YouTube seeks ±10s, Spotify/everything else skips track.
+  #
+  # The i25/AirMouse remote's FF/RW buttons actually emit XF86AudioNext /
+  # XF86AudioPrev (NOT XF86AudioForward/Rewind — verified with `wev`). We bind
+  # all four keysyms to the same handler so it works regardless of which a given
+  # remote sends.
   - key: XF86AudioForward
     command: exec "$HOME/launcher/media-seek.sh fwd"
     comment: Fast-forward (seek/next, app-dependent)
   - key: XF86AudioRewind
     command: exec "$HOME/launcher/media-seek.sh back"
     comment: Rewind (seek/previous, app-dependent)
+  - key: XF86AudioNext
+    command: exec "$HOME/launcher/media-seek.sh fwd"
+    comment: Fast-forward — keysym this remote's FF button actually sends
+  - key: XF86AudioPrev
+    command: exec "$HOME/launcher/media-seek.sh back"
+    comment: Rewind — keysym this remote's RW button actually sends
 
   # Back — acts like a browser Back button: inject Alt+Left into the focused
   # window (wtype). Works in YouTube (--app) and Chrome; harmless elsewhere.

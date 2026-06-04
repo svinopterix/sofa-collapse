@@ -330,9 +330,9 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
 AUTOLOGIN
 sudo systemctl daemon-reload
 
-# --- 9. Don't block boot waiting for the network -----------------------------
-# *-wait-online ordering services hold up boot until every managed interface is
-# "online", timing out after 120s if one never comes up (e.g. an unplugged
+# --- 9. Speed up boot --------------------------------------------------------
+# (a) *-wait-online ordering services hold up boot until every managed interface
+# is "online", timing out after 120s if one never comes up (e.g. an unplugged
 # ethernet port). Nothing here needs the network before login — the kiosk and
 # bridge are loopback-only (127.0.0.1:9234) — so disable+mask whichever
 # wait-online unit is present. Idempotent; ignores units that don't exist.
@@ -344,6 +344,23 @@ for unit in systemd-networkd-wait-online.service NetworkManager-wait-online.serv
     sudo systemctl mask "$unit"    2>/dev/null || true
   fi
 done
+
+# (b) Trim the GRUB menu countdown to 1s (this box boots straight to the kiosk;
+# no need to sit on the boot menu). Rewrite GRUB_TIMEOUT in place if present,
+# else append; then regenerate grub.cfg. Idempotent.
+if [ -f /etc/default/grub ]; then
+  log "Setting GRUB menu timeout to 1s"
+  if grep -q '^GRUB_TIMEOUT=' /etc/default/grub; then
+    sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=1/' /etc/default/grub
+  else
+    echo 'GRUB_TIMEOUT=1' | sudo tee -a /etc/default/grub >/dev/null
+  fi
+  if command -v update-grub >/dev/null 2>&1; then
+    sudo update-grub
+  else
+    sudo grub-mkconfig -o /boot/grub/grub.cfg
+  fi
+fi
 
 # --- 10. Auto-start Sway on tty1 login --------------------------------------
 log "Configuring Sway auto-start on tty1"
