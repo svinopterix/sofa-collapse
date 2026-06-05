@@ -9,7 +9,8 @@
     { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null, "match": "app_id=\"google-chrome\"" },
     { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null, "match": "class=\"Spotify\"" },
     { "name": "Jellyfin", "icon": "🎬", "cmd": "flatpak run org.jellyfin.JellyfinDesktop", "accent": "#00a4dc", "badge": null, "match": "app_id=\"org.jellyfin.JellyfinDesktop\"" },
-    { "name": "Audio",    "icon": "🔊", "cmd": "pavucontrol",      "accent": "#f59e0b", "badge": null, "match": "app_id=\"pavucontrol\"" }
+    { "name": "Audio",    "icon": "🔊", "cmd": "pavucontrol",      "accent": "#f59e0b", "badge": null, "match": "app_id=\"pavucontrol\"" },
+    { "name": "VLC",      "icon": "🎞️", "cmd": "flatpak run org.videolan.VLC", "accent": "#ff8800", "badge": null, "match": "class=\"vlc\"" }
   ],
   "recents": ["Jellyfin", "Spotify", "YouTube"]
 }

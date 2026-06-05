@@ -54,10 +54,37 @@ Verified selectors against the live `swaymsg -t get_tree` on the media box (host
 | YouTube tile | Chromium `--app` | `chrome-www.youtube.com__-Default` | `app_id="chrome-www.youtube.com__-Default"` |
 | Google Chrome | — | `google-chrome` | `app_id="google-chrome"` |
 | Launcher kiosk | Chromium snap `--app` | `chrome-127.0.0.1__-Default` | matched by title `"TV Launcher"` in go-home.sh |
+| VLC | Flatpak (Qt5 → Xwayland) | `null` | `class="vlc"` (launched via `flatpak run org.videolan.VLC`; Qt5 app runs under Xwayland, so `app_id=null` — match by `class`; verified lowercase `vlc`, *not* capitalized) |
 
 Rule of thumb: **Xwayland apps have `app_id=null` — match them by `class=` (capitalized, with spaces), never `app_id`.** Chromium `--app=` pages get a distinct per-URL `app_id` (`chrome-<host>__-Default`), not the bare `chromium` app_id.
 
 **Focus-or-launch requires `SWAYSOCK` in the bridge's environment.** On a normal boot the bridge inherits it (Sway → `start-kiosk.sh` → `server.py`). Restarting the bridge from a plain SSH shell strips `SWAYSOCK` and silently breaks focus-or-launch (falls through to spawning a duplicate). To restart over SSH, relaunch through Sway: `swaymsg exec '~/launcher/start-kiosk.sh'`.
+
+#### Adding an app
+
+End-to-end plan for adding a new launcher app. The fiddly parts aren't the tile — they're (a) installing the app on a box whose Ubuntu is newer than the upstream packaging targets, and (b) getting the `match` selector right, which can only be confirmed against a live window.
+
+1. **Add a per-app installer in `apps/available/`.** Each app's install is its own idempotent script in `apps/available/<name>.sh` (e.g. `chromium.sh`, `chrome.sh`, `spotify.sh`, `jellyfin_desktop.sh`, `pavucontrol.sh`); enable it by symlinking it into `apps/install/` (`ln -sf ../available/<name>.sh apps/install/<name>.sh`). `vm/provision.sh` runs every `*.sh` in `apps/install/` (sorted by name) — no edit to `provision.sh` itself is needed. This is the **sites-available/sites-enabled** pattern: `apps/available/` holds all installers, `apps/install/` holds symlinks to the enabled ones. Make the script standalone-runnable (its own shebang + `set -euo pipefail`) and idempotent (guard with `command -v` / `flatpak info` / `snap list` so re-runs are safe). Pick the packaging in this order of preference:
+   - **Flatpak (Flathub)** — best for GUI apps, *especially* off-LTS. It bundles its own runtime, so it sidesteps Ubuntu dep skew (the Jellyfin `.deb` hard-depends on `libcec6`/Qt5, uninstallable on 24.10+ which ship `libcec7`; the Flatpak just works). `flatpak` and the Flathub remote are already set up by provision. Launch via `flatpak run <app-id>`.
+   - **apt** (official repo or a `.deb`) — fine for things Ubuntu/vendor ships for the box's codename; watch for dep skew on non-LTS releases.
+   - **snap** — as used for Chromium/Spotify.
+2. **Add the tile to `src/launcher/apps.json`.** A new object in `apps[]`: `name`, `icon` (emoji), `cmd` (the shell command from step 1), `accent`, optional `badge`. Leave `match` out for now. No code change is needed anywhere else.
+3. **Find the correct `match` selector against a live window** — the only reliable way (do not guess from the app name). On the box (`ssh sofa@<host>`), launch the app once into the running Sway session and read its window props:
+   ```bash
+   export SWAYSOCK="$(echo /run/user/1000/sway-ipc.*.sock)"
+   setsid <cmd> >/tmp/app.log 2>&1 &          # e.g. flatpak run org.jellyfin.JellyfinDesktop
+   # wait for the window, then dump app_id / class / title:
+   swaymsg -t get_tree | jq -r '.. | objects
+     | select(.app_id? != null or (.window_properties?.class? != null))
+     | "app_id=\(.app_id) | class=\(.window_properties.class) | title=\(.name)"'
+   ```
+   Apply the rule of thumb above: native-Wayland/Chromium `--app` apps → `app_id="…"`; Xwayland apps (`app_id=null`) → `class="…"` (capitalized, with spaces). Confirm it actually selects: `swaymsg '[<match>] focus, fullscreen enable'` should focus the window. Then `swaymsg '[<match>] kill'` the test instance. Add the verified `match` to the `apps.json` object and a row to the selectors table above.
+4. **Deploy.** `apps.json` is *copied* into `~/launcher/` at provision time, so editing the repo copy alone does nothing to a running box. Either re-run `vm/provision.sh` (also installs the app), or for a quick iteration `scp src/launcher/apps.json sofa@<host>:~/launcher/apps.json` and restart the bridge **through Sway** so it keeps `SWAYSOCK`: `swaymsg exec '~/launcher/start-kiosk.sh'` (kill the old `server.py` first).
+5. **Verify end-to-end** by exercising the bridge exactly as the tile does, and confirm the window comes up:
+   ```bash
+   curl -fsS -X POST http://127.0.0.1:9234/launch -H 'Content-Type: application/json' \
+     -d '{"name":"<Name>","cmd":"<cmd>","match":"<match>"}'
+   ```
 
 ## Install & run
 
@@ -84,6 +111,6 @@ python3 src/launcher/server.py
 - The repo copy under `src/launcher/` is the source; the deployed copy lives in `~/launcher/`. They diverge after provisioning.
 - The Sway config and the `start-kiosk.sh` / `go-home.sh` / `media-seek.sh` helpers are **generated** by `vm/provision.sh` (the source of truth). To change window rules, edit `vm/provision.sh` and re-run it, or edit `~/.config/sway/config` live and `swaymsg reload`. Note `for_window` rules apply only to windows mapped *after* the reload.
 - **Hotkeys** (the Sway `bindsym` mappings: remote Home button, the media/playback keys, + the testing escape hatches) are declared in `src/launcher/keybindings.yaml`. `vm/provision.sh` parses it (via `python3-yaml`) into `bindsym <key> <command>` lines in the generated Sway config. To add/change a hotkey, edit the YAML and re-run `vm/provision.sh`. `$mod`/`$HOME` in the YAML are written through verbatim for Sway / its exec shell. (The Alt+Shift keyboard-layout toggle is an xkb option, not a bindsym, so it stays in the `input` block in `vm/provision.sh`. The in-launcher arrow/gamepad navigation keys are hardcoded JS in `index.html`.)
-- Adding an app = a new object in `apps.json`. No code change needed.
+- Adding an app: no frontend/server code change needed, but it's more than just an `apps.json` edit — add a per-app installer in `apps/available/` and symlink it into `apps/install/` (`vm/provision.sh` runs every script there), verify the `match` selector against a live window, and deploy. See **Adding an app** above for the step-by-step.
 - `cmd` is run through a shell on a trusted, loopback-only server — that's intentional for this single-user appliance, not an injection bug to "fix".
 - **Legacy (X11) path**: `src/launcher/install.sh`, `tv-launcher-bridge.service`, `tv-launcher-kiosk.service`, and `src/initial-setup.md` describe an earlier Openbox + LightDM + systemd-user-services setup. That's superseded by the Sway/Wayland path in `vm/provision.sh` — don't mix the two. (Kept for reference / X11 hosts.)

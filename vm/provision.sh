@@ -23,13 +23,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LAUNCHER_SRC="$REPO_ROOT/src/launcher"
 LAUNCHER_DST="$HOME/launcher"
 SWAY_CFG_DIR="$HOME/.config/sway"
+SPLASH_SRC="$REPO_ROOT/vm/media/boot_splash.png"
 
-# Jellyfin client: installed as a Flatpak from Flathub. The old Qt .deb
-# (jellyfin-media-player) hard-depends on libcec6 / Qt5, which aren't
-# installable on newer Ubuntu (24.10+ ship libcec7), so the .deb path breaks
-# off-LTS. The Flatpak bundles its own runtime and is the client Jellyfin now
-# ships — installing the (EOL) media-player app id auto-rebases to this one.
-JELLYFIN_FLATPAK_ID="${JELLYFIN_FLATPAK_ID:-org.jellyfin.JellyfinDesktop}"
+# Per-app installers live in apps/available/ and are enabled by symlinking them
+# into apps/install/ (sites-available/sites-enabled style). provision.sh runs
+# every *.sh in apps/install/ below — to add or drop an app's install, add a
+# script in apps/available/ and (un)link it in apps/install/. Each script is
+# standalone-runnable and idempotent.
+APPS_INSTALL="$REPO_ROOT/apps/install"
 
 # Mouse sensitivity → Sway/libinput pointer acceleration (pointer_accel), a
 # value in -1.0 (slowest) .. 1.0 (fastest), where 0 is the libinput default.
@@ -58,7 +59,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   jq curl wget gnupg ca-certificates apt-transport-https \
   fonts-noto-core fonts-noto-color-emoji \
   language-pack-ru \
-  pipewire pipewire-pulse pipewire-audio wireplumber pavucontrol pulseaudio-utils
+  pipewire pipewire-pulse pipewire-audio wireplumber pulseaudio-utils
 
 # A minimal Sway install ships no sound server, so launched apps (Spotify, Jellyfin)
 # have nothing to play through. Enable the PipeWire user services so they start
@@ -68,44 +69,20 @@ log "Enabling PipeWire user audio services"
 systemctl --user enable --now pipewire pipewire-pulse wireplumber 2>/dev/null \
   || warn "Could not enable PipeWire user services now (no user session?); they are enabled and will start on next login."
 
-# --- 2. Chromium (snap) — also used as the kiosk shell ----------------------
-# Ubuntu's chromium is a snap; the snap command is `chromium`. The launcher
-# tile uses `chromium-browser`, so we add a compatibility symlink.
-log "Installing Chromium (snap)"
-if ! snap list chromium >/dev/null 2>&1; then
-  sudo snap install chromium
-fi
-if [ ! -e /usr/local/bin/chromium-browser ]; then
-  sudo ln -sf "$(command -v chromium || echo /snap/bin/chromium)" /usr/local/bin/chromium-browser
-fi
+# --- 2. Launcher apps (Chromium, Google Chrome, Spotify, Jellyfin, …) -------
+# Each app's installer is its own idempotent script in apps/available/, enabled
+# by a symlink in apps/install/. Run every enabled installer in turn (sorted by
+# name). To add/remove an app's install, drop a script in apps/available/ and
+# (un)link it in apps/install/ — no edit here needed.
+log "Installing launcher apps from $APPS_INSTALL"
+shopt -s nullglob
+for app_script in "$APPS_INSTALL"/*.sh; do
+  log "Running $(basename "$app_script")"
+  bash "$app_script"
+done
+shopt -u nullglob
 
-# --- 3. Google Chrome (official apt repo) -----------------------------------
-log "Installing Google Chrome"
-if [ ! -f /etc/apt/keyrings/google-chrome.gpg ]; then
-  sudo install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-    | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-fi
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-  | sudo tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
-sudo apt-get update -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y google-chrome-stable
-
-# --- 4. Spotify (snap) ------------------------------------------------------
-log "Installing Spotify (snap)"
-if ! snap list spotify >/dev/null 2>&1; then
-  sudo snap install spotify
-fi
-
-# --- 5. Jellyfin Desktop (Flatpak from Flathub) -----------------------------
-log "Installing Jellyfin ($JELLYFIN_FLATPAK_ID via Flatpak)"
-sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-if ! flatpak info "$JELLYFIN_FLATPAK_ID" >/dev/null 2>&1; then
-  sudo flatpak install -y --noninteractive flathub "$JELLYFIN_FLATPAK_ID" \
-    || warn "Jellyfin Flatpak install failed; re-run, or install it manually. Continuing without it."
-fi
-
-# --- 6. Deploy the launcher (bridge + UI) -----------------------------------
+# --- 3. Deploy the launcher (bridge + UI) -----------------------------------
 log "Deploying launcher to $LAUNCHER_DST"
 mkdir -p "$LAUNCHER_DST"
 cp "$LAUNCHER_SRC/index.html"       "$LAUNCHER_DST/"
@@ -237,7 +214,7 @@ fi
 SEEK
 chmod +x "$LAUNCHER_DST/media-seek.sh"
 
-# --- 7. Sway config: run the kiosk, hide cursor, easy exit ------------------
+# --- 4. Sway config: run the kiosk, hide cursor, easy exit ------------------
 log "Writing Sway config"
 mkdir -p "$SWAY_CFG_DIR"
 
@@ -310,7 +287,7 @@ exec "\$HOME/launcher/start-kiosk.sh"
 $KEYBINDINGS
 SWAY
 
-# --- 8. Auto-login on tty1 --------------------------------------------------
+# --- 5. Auto-login on tty1 --------------------------------------------------
 # No display manager (lightdm) on this Wayland path — the kiosk is brought up by
 # the .bash_profile hook below, which only fires after a tty1 login shell. Drop
 # in a getty override so tty1 logs this user in automatically (no password
@@ -325,7 +302,7 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
 AUTOLOGIN
 sudo systemctl daemon-reload
 
-# --- 9. Speed up boot --------------------------------------------------------
+# --- 6. Speed up boot --------------------------------------------------------
 # (a) *-wait-online ordering services hold up boot until every managed interface
 # is "online", timing out after 120s if one never comes up (e.g. an unplugged
 # ethernet port). Nothing here needs the network before login — the kiosk and
@@ -350,6 +327,13 @@ if [ -f /etc/default/grub ]; then
   else
     echo 'GRUB_TIMEOUT=1' | sudo tee -a /etc/default/grub >/dev/null
   fi
+  # Ensure the kernel boots with "quiet splash" so Plymouth (the boot splash set
+  # up in 6c below) takes over the screen instead of kernel log spam.
+  if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub; then
+    sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+  else
+    echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' | sudo tee -a /etc/default/grub >/dev/null
+  fi
   if command -v update-grub >/dev/null 2>&1; then
     sudo update-grub
   else
@@ -357,7 +341,61 @@ if [ -f /etc/default/grub ]; then
   fi
 fi
 
-# --- 10. Auto-start Sway on tty1 login --------------------------------------
+# --- 6c. Boot splash (Plymouth) ---------------------------------------------
+# Show vm/media/boot_splash.png full-screen during boot/shutdown instead of
+# kernel log spam. Install Plymouth, drop a minimal "script" theme that centers
+# the image (scaled to fit) on the kiosk's background color, make it the default,
+# and rebuild the initramfs (-R) so the splash is present early at boot. The
+# "quiet splash" cmdline added in 6b is what tells the kernel to show it.
+if [ -f "$SPLASH_SRC" ]; then
+  log "Installing boot splash (Plymouth)"
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y plymouth plymouth-themes
+  SPLASH_THEME_DIR="/usr/share/plymouth/themes/sofa-splash"
+  sudo install -d "$SPLASH_THEME_DIR"
+  sudo install -m 0644 "$SPLASH_SRC" "$SPLASH_THEME_DIR/boot_splash.png"
+
+  sudo tee "$SPLASH_THEME_DIR/sofa-splash.plymouth" >/dev/null <<'PLYMOUTH'
+[Plymouth Theme]
+Name=Sofa Splash
+Description=Sofa-collapse boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/sofa-splash
+ScriptFile=/usr/share/plymouth/themes/sofa-splash/sofa-splash.script
+PLYMOUTH
+
+  # Plymouth "script" language: center the image and scale it to *cover* the
+  # whole screen (preserving aspect ratio, cropping the overflow), on the kiosk
+  # background (#0a0c10) which only shows if scaling can't fully cover.
+  sudo tee "$SPLASH_THEME_DIR/sofa-splash.script" >/dev/null <<'SCRIPT'
+Window.SetBackgroundTopColor(0.039, 0.047, 0.063);
+Window.SetBackgroundBottomColor(0.039, 0.047, 0.063);
+
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+image = Image("boot_splash.png");
+img_w = image.GetWidth();
+img_h = image.GetHeight();
+
+scale = screen_width / img_w;
+scale_y = screen_height / img_h;
+if (scale_y > scale)
+    scale = scale_y;
+
+splash = image.Scale(img_w * scale, img_h * scale);
+sprite = Sprite(splash);
+sprite.SetX(screen_width  / 2 - splash.GetWidth()  / 2);
+sprite.SetY(screen_height / 2 - splash.GetHeight() / 2);
+SCRIPT
+
+  sudo plymouth-set-default-theme -R sofa-splash
+else
+  warn "Splash image not found at $SPLASH_SRC; skipping boot splash setup."
+fi
+
+# --- 7. Auto-start Sway on tty1 login --------------------------------------
 log "Configuring Sway auto-start on tty1"
 PROFILE="$HOME/.bash_profile"
 MARKER="# >>> tv-launcher sway autostart >>>"
