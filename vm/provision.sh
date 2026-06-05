@@ -417,7 +417,18 @@ sprite.SetX(screen_width  / 2 - splash.GetWidth()  / 2);
 sprite.SetY(screen_height / 2 - splash.GetHeight() / 2);
 SCRIPT
 
-  sudo plymouth-set-default-theme -R sofa-splash
+  # Make sofa-splash the default theme and rebuild the initramfs so it's present
+  # early at boot. Newer Ubuntu (plymouth 24.x) dropped the plymouth-set-default-theme
+  # helper, so select the theme via update-alternatives on default.plymouth; fall
+  # back to the old helper if it's still around (older releases).
+  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    sudo plymouth-set-default-theme -R sofa-splash
+  else
+    sudo update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+      default.plymouth "$SPLASH_THEME_DIR/sofa-splash.plymouth" 200
+    sudo update-alternatives --set default.plymouth "$SPLASH_THEME_DIR/sofa-splash.plymouth"
+    sudo update-initramfs -u
+  fi
 else
   warn "Splash image not found at $SPLASH_SRC; skipping boot splash setup."
 fi
