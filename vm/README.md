@@ -1,7 +1,7 @@
 # Testing the launcher in a VM (Ubuntu 24.04 + Sway)
 
 Three steps: **create** a clean Ubuntu 24.04 VM, **provision** it with `provision.sh`
-(installs Sway + Chromium/Chrome/Spotify/Jellyfin + the launcher), then **test**.
+(installs Sway + Chromium/Chrome/Spotify + Jellyfin Desktop + the launcher), then **test**.
 
 The provisioning script targets **Sway (Wayland)** and drives the kiosk from
 Sway's config — it deliberately does *not* use the production `tv-launcher-*.service`
@@ -36,12 +36,13 @@ cd ~/sofa-collapse && ./vm/provision.sh
 
 `./vm/provision.sh` (run as your normal sudo user, inside the VM). Idempotent.
 
-Jellyfin Media Player isn't in Ubuntu's repos; the script pulls the `.deb` for
-this machine's Ubuntu codename from the latest GitHub release. If that fails,
-set a known-good URL and re-run:
+Jellyfin is installed as a **Flatpak** from Flathub (`org.jellyfin.JellyfinDesktop`).
+The old Qt `.deb` (`jellyfin-media-player`) hard-depends on libcec6/Qt5, which
+aren't installable on newer Ubuntu (24.10+ ship libcec7), so the Flatpak — which
+bundles its own runtime — is used instead. Override the app id if needed:
 
 ```bash
-JELLYFIN_DEB_URL="https://.../jellyfin-media-player_1.12.0-noble.deb" ./vm/provision.sh
+JELLYFIN_FLATPAK_ID="org.jellyfin.JellyfinDesktop" ./vm/provision.sh
 ```
 
 ## 3. Test

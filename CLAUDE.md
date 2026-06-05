@@ -50,7 +50,7 @@ Verified selectors against the live `swaymsg -t get_tree` on the media box (host
 | App | Runs under | `app_id` | Correct `match` |
 | --- | --- | --- | --- |
 | Spotify | Xwayland | `null` | `class="Spotify"` |
-| Jellyfin Media Player | Xwayland (Qt) | `null` | `class="Jellyfin Media Player"` (binary `jellyfinmediaplayer`; verify against `swaymsg -t get_tree` on the box — it's a Qt/Xwayland app so `app_id` is null, match by `class`) |
+| Jellyfin Desktop | Flatpak (native Wayland) | `org.jellyfin.JellyfinDesktop` | `app_id="org.jellyfin.JellyfinDesktop"` (launched via `flatpak run org.jellyfin.JellyfinDesktop`; native Wayland app — verified `app_id` on the box, title is `Jellyfin`) |
 | YouTube tile | Chromium `--app` | `chrome-www.youtube.com__-Default` | `app_id="chrome-www.youtube.com__-Default"` |
 | Google Chrome | — | `google-chrome` | `app_id="google-chrome"` |
 | Launcher kiosk | Chromium snap `--app` | `chrome-127.0.0.1__-Default` | matched by title `"TV Launcher"` in go-home.sh |

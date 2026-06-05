@@ -4,7 +4,7 @@
 #
 # Turn a CLEAN Ubuntu 24.04 LTS install into a Sway-based kiosk running the
 # TV launcher (the bridge server + a Chromium kiosk, with all launcher apps
-# installed: Chromium, Google Chrome, Spotify, Jellyfin Media Player).
+# installed: Chromium, Google Chrome, Spotify, Jellyfin Desktop).
 #
 # Run INSIDE the VM, as your normal (non-root) user that has sudo:
 #     ./vm/provision.sh
@@ -24,12 +24,12 @@ LAUNCHER_SRC="$REPO_ROOT/src/launcher"
 LAUNCHER_DST="$HOME/launcher"
 SWAY_CFG_DIR="$HOME/.config/sway"
 
-# Jellyfin Media Player is not in Ubuntu's repos. We install the .deb from
-# GitHub releases — assets are per-Ubuntu-codename (e.g. ...-noble.deb), so by
-# default we auto-pick the asset matching this machine's codename from the
-# latest release. Override JELLYFIN_DEB_URL to pin a specific build.
-JELLYFIN_GH_REPO="${JELLYFIN_GH_REPO:-jellyfin/jellyfin-media-player}"
-JELLYFIN_DEB_URL="${JELLYFIN_DEB_URL:-}"
+# Jellyfin client: installed as a Flatpak from Flathub. The old Qt .deb
+# (jellyfin-media-player) hard-depends on libcec6 / Qt5, which aren't
+# installable on newer Ubuntu (24.10+ ship libcec7), so the .deb path breaks
+# off-LTS. The Flatpak bundles its own runtime and is the client Jellyfin now
+# ships — installing the (EOL) media-player app id auto-rebases to this one.
+JELLYFIN_FLATPAK_ID="${JELLYFIN_FLATPAK_ID:-org.jellyfin.JellyfinDesktop}"
 
 # Mouse sensitivity → Sway/libinput pointer acceleration (pointer_accel), a
 # value in -1.0 (slowest) .. 1.0 (fastest), where 0 is the libinput default.
@@ -54,6 +54,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   wl-clipboard \
   playerctl wtype \
   python3 python3-yaml \
+  flatpak \
   jq curl wget gnupg ca-certificates apt-transport-https \
   fonts-noto-core fonts-noto-color-emoji \
   language-pack-ru \
@@ -96,26 +97,12 @@ if ! snap list spotify >/dev/null 2>&1; then
   sudo snap install spotify
 fi
 
-# --- 5. Jellyfin Media Player (best-effort: .deb from GitHub releases) -------
-log "Installing Jellyfin Media Player"
-if ! command -v jellyfinmediaplayer >/dev/null 2>&1; then
-  codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
-  if [ -z "$JELLYFIN_DEB_URL" ]; then
-    # Assets are named jellyfin-media-player_<version>-<codename>.deb; pick the
-    # one matching this machine's Ubuntu codename from the latest release.
-    JELLYFIN_DEB_URL="$(curl -fsSL "https://api.github.com/repos/${JELLYFIN_GH_REPO}/releases/latest" \
-      | jq -r --arg cn "$codename" '[.assets[].browser_download_url
-                | select(endswith($cn + ".deb"))][0] // empty' 2>/dev/null || true)"
-  fi
-  if [ -n "$JELLYFIN_DEB_URL" ]; then
-    tmp="$(mktemp --suffix=.deb)"
-    curl -fSL "$JELLYFIN_DEB_URL" -o "$tmp"
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp"
-    rm -f "$tmp"
-  else
-    warn "Could not auto-locate a Jellyfin Media Player .deb for '$codename'. Set"
-    warn "JELLYFIN_DEB_URL=<url> and re-run, or install it manually. Continuing without it."
-  fi
+# --- 5. Jellyfin Desktop (Flatpak from Flathub) -----------------------------
+log "Installing Jellyfin ($JELLYFIN_FLATPAK_ID via Flatpak)"
+sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+if ! flatpak info "$JELLYFIN_FLATPAK_ID" >/dev/null 2>&1; then
+  sudo flatpak install -y --noninteractive flathub "$JELLYFIN_FLATPAK_ID" \
+    || warn "Jellyfin Flatpak install failed; re-run, or install it manually. Continuing without it."
 fi
 
 # --- 6. Deploy the launcher (bridge + UI) -----------------------------------
