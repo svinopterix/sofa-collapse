@@ -1,7 +1,7 @@
 # Testing the launcher in a VM (Ubuntu 24.04 + Sway)
 
 Three steps: **create** a clean Ubuntu 24.04 VM, **provision** it with `provision.sh`
-(installs Sway + Chromium/Chrome/Spotify/Emby + the launcher), then **test**.
+(installs Sway + Chromium/Chrome/Spotify/Jellyfin + the launcher), then **test**.
 
 The provisioning script targets **Sway (Wayland)** and drives the kiosk from
 Sway's config — it deliberately does *not* use the production `tv-launcher-*.service`
@@ -36,11 +36,12 @@ cd ~/sofa-collapse && ./vm/provision.sh
 
 `./vm/provision.sh` (run as your normal sudo user, inside the VM). Idempotent.
 
-Emby Theater isn't in Ubuntu's repos; the script pulls the latest `.deb` from
-GitHub releases. If that fails, set a known-good URL and re-run:
+Jellyfin Media Player isn't in Ubuntu's repos; the script pulls the `.deb` for
+this machine's Ubuntu codename from the latest GitHub release. If that fails,
+set a known-good URL and re-run:
 
 ```bash
-EMBY_DEB_URL="https://.../emby-theater_amd64.deb" ./vm/provision.sh
+JELLYFIN_DEB_URL="https://.../jellyfin-media-player_1.12.0-noble.deb" ./vm/provision.sh
 ```
 
 ## 3. Test

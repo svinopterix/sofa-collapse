@@ -4,7 +4,7 @@
 #
 # Turn a CLEAN Ubuntu 24.04 LTS install into a Sway-based kiosk running the
 # TV launcher (the bridge server + a Chromium kiosk, with all launcher apps
-# installed: Chromium, Google Chrome, Spotify, Emby Theater).
+# installed: Chromium, Google Chrome, Spotify, Jellyfin Media Player).
 #
 # Run INSIDE the VM, as your normal (non-root) user that has sudo:
 #     ./vm/provision.sh
@@ -24,11 +24,12 @@ LAUNCHER_SRC="$REPO_ROOT/src/launcher"
 LAUNCHER_DST="$HOME/launcher"
 SWAY_CFG_DIR="$HOME/.config/sway"
 
-# Emby Theater is not in Ubuntu's repos. We install a known-good .deb from
-# GitHub releases. Override EMBY_DEB_URL to pin a different build, or set it
-# empty (and adjust EMBY_GH_REPO) to fall back to auto-discovery.
-EMBY_GH_REPO="${EMBY_GH_REPO:-MediaBrowser/Emby.Releases}"
-EMBY_DEB_URL="${EMBY_DEB_URL:-https://github.com/MediaBrowser/emby-theater-electron/releases/download/3.0.21/emby-theater-deb_3.0.21_amd64.deb}"
+# Jellyfin Media Player is not in Ubuntu's repos. We install the .deb from
+# GitHub releases — assets are per-Ubuntu-codename (e.g. ...-noble.deb), so by
+# default we auto-pick the asset matching this machine's codename from the
+# latest release. Override JELLYFIN_DEB_URL to pin a specific build.
+JELLYFIN_GH_REPO="${JELLYFIN_GH_REPO:-jellyfin/jellyfin-media-player}"
+JELLYFIN_DEB_URL="${JELLYFIN_DEB_URL:-}"
 
 # Mouse sensitivity → Sway/libinput pointer acceleration (pointer_accel), a
 # value in -1.0 (slowest) .. 1.0 (fastest), where 0 is the libinput default.
@@ -58,7 +59,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   language-pack-ru \
   pipewire pipewire-pulse pipewire-audio wireplumber pavucontrol pulseaudio-utils
 
-# A minimal Sway install ships no sound server, so launched apps (Spotify, Emby)
+# A minimal Sway install ships no sound server, so launched apps (Spotify, Jellyfin)
 # have nothing to play through. Enable the PipeWire user services so they start
 # with the sofa session. Run as the user (NOT via sudo) so they land in the
 # right systemd --user instance; harmless if already enabled.
@@ -95,28 +96,25 @@ if ! snap list spotify >/dev/null 2>&1; then
   sudo snap install spotify
 fi
 
-# --- 5. Emby Theater (best-effort: latest .deb from GitHub releases) --------
-log "Installing Emby Theater"
-if ! command -v emby-theater >/dev/null 2>&1; then
-  if [ -z "$EMBY_DEB_URL" ]; then
-    EMBY_DEB_URL="$(curl -fsSL "https://api.github.com/repos/${EMBY_GH_REPO}/releases" \
-      | jq -r '[.[].assets[]?.browser_download_url
-                | select(test("(?i)theater"))
-                | select(test("(?i)(amd64|x86_64)"))
-                | select(endswith(".deb"))][0] // empty' 2>/dev/null || true)"
+# --- 5. Jellyfin Media Player (best-effort: .deb from GitHub releases) -------
+log "Installing Jellyfin Media Player"
+if ! command -v jellyfinmediaplayer >/dev/null 2>&1; then
+  codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+  if [ -z "$JELLYFIN_DEB_URL" ]; then
+    # Assets are named jellyfin-media-player_<version>-<codename>.deb; pick the
+    # one matching this machine's Ubuntu codename from the latest release.
+    JELLYFIN_DEB_URL="$(curl -fsSL "https://api.github.com/repos/${JELLYFIN_GH_REPO}/releases/latest" \
+      | jq -r --arg cn "$codename" '[.assets[].browser_download_url
+                | select(endswith($cn + ".deb"))][0] // empty' 2>/dev/null || true)"
   fi
-  if [ -n "$EMBY_DEB_URL" ]; then
-    # Emby Theater is an Electron app; its .deb doesn't always pull in the
-    # X screensaver lib it links against (libXss.so.1 -> libxss1), so install
-    # it explicitly to avoid a missing-shared-library crash on launch.
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libxss1
+  if [ -n "$JELLYFIN_DEB_URL" ]; then
     tmp="$(mktemp --suffix=.deb)"
-    curl -fSL "$EMBY_DEB_URL" -o "$tmp"
+    curl -fSL "$JELLYFIN_DEB_URL" -o "$tmp"
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp"
     rm -f "$tmp"
   else
-    warn "Could not auto-locate an Emby Theater .deb. Set EMBY_DEB_URL=<url> and"
-    warn "re-run, or install it manually. Continuing without Emby."
+    warn "Could not auto-locate a Jellyfin Media Player .deb for '$codename'. Set"
+    warn "JELLYFIN_DEB_URL=<url> and re-run, or install it manually. Continuing without it."
   fi
 fi
 

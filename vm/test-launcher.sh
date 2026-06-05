@@ -11,7 +11,7 @@
 # Usage:  ./vm/test-launcher.sh [output.png]
 #
 # Note: this confirms the launcher *shell* paints. Actually launching the real
-# apps (Chrome/Spotify/Emby windows) needs a real display — use an interactive
+# apps (Chrome/Spotify/Jellyfin windows) needs a real display — use an interactive
 # VM (QEMU/VirtualBox) for that, per vm/README.md.
 # ============================================================================
 set -euo pipefail

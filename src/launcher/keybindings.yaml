@@ -78,7 +78,7 @@ bindings:
     comment: Browser back (Alt+Left)
 
   # PageUp / PageDown are intentionally NOT bound: leaving the Prior/Next keysyms
-  # unbound lets them pass straight through to the focused app (Chromium, Emby,
+  # unbound lets them pass straight through to the focused app (Chromium, Jellyfin,
   # etc.) to scroll/page natively.
 
   # Escape hatches for testing.

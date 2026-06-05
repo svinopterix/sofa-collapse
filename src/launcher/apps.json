@@ -8,8 +8,8 @@
     { "name": "YouTube",  "icon": "📺", "cmd": "chromium --kiosk --app=https://www.youtube.com --ozone-platform=wayland", "accent": "#ff0000", "badge": null, "match": "app_id=\"chrome-www.youtube.com__-Default\"" },
     { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null, "match": "app_id=\"google-chrome\"" },
     { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null, "match": "class=\"Spotify\"" },
-    { "name": "Emby",     "icon": "🎬", "cmd": "emby-theater",     "accent": "#52b54b", "badge": null, "match": "class=\"Emby Theater\"" },
+    { "name": "Jellyfin", "icon": "🎬", "cmd": "jellyfinmediaplayer", "accent": "#00a4dc", "badge": null, "match": "class=\"Jellyfin Media Player\"" },
     { "name": "Audio",    "icon": "🔊", "cmd": "pavucontrol",      "accent": "#f59e0b", "badge": null, "match": "app_id=\"pavucontrol\"" }
   ],
-  "recents": ["Emby", "Spotify", "YouTube"]
+  "recents": ["Jellyfin", "Spotify", "YouTube"]
 }
