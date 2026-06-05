@@ -13,10 +13,12 @@ Two components — a bridge server and a Chromium kiosk — wired together by Sw
 - **Bridge server** (`src/launcher/server.py`) — a stdlib-only `http.server` bound to `127.0.0.1:9234` (never network-exposed). It is the only component that can run commands. Started by `start-kiosk.sh` (not a service). Endpoints:
   - `GET /` and `/index.html` → serves the launcher UI
   - `GET /apps` → serves `apps.json` to the frontend
+  - `GET /system` → serves `system.json` (the **System** section's audio profiles + current selection) to the frontend
   - `GET /state` → returns the global UI state as JSON (see below)
   - `POST /launch` `{name, cmd, match}` → runs `cmd` via `subprocess.Popen(shell=True, start_new_session=True)` so launched apps outlive a server restart; also sets state to `APP` with `name`
   - `POST /home` → sets state back to `HOME`; called fire-and-forget by `go-home.sh` (the remote Home button)
   - `POST /update-recents` `{recents}` → persists the recents list (capped at 8) back into `apps.json`
+  - `POST /set-audio` `{name}` → switches the default audio output for *all* apps to the named profile from `system.json`, then persists the selection there. Routes through `pactl set-default-sink <sink>` (stable by sink *name*, unlike `wpctl`'s unstable numeric node IDs) and `pactl move-sink-input` to pull already-playing streams over immediately. On startup the bridge re-applies the saved selection (`apply_saved_audio`) so the stored default (SMSL DAC) wins after a reboot. Like focus-or-launch's `SWAYSOCK`, this needs the bridge to inherit the user's audio session env (`XDG_RUNTIME_DIR`) — present on a normal Sway boot, possibly stripped when restarting from a bare SSH shell.
 
 ### Global UI state
 
@@ -40,6 +42,10 @@ Key design point: the server uses CORS `Access-Control-Allow-Origin: null` becau
 ### Config: `src/launcher/apps.json`
 
 Single source of truth for the launcher. `settings` (username, columns, accent_color), `apps[]` (each: `name`, `icon` emoji, `cmd` shell string, `accent` color, optional `badge` of `hot`/`new`/`update`, optional `match` Sway criteria for focus-or-launch), and `recents[]` (app names). The `recents` array is rewritten by the server at runtime — edits there will be overwritten.
+
+### Config: `src/launcher/system.json`
+
+Backs the launcher's **System** section (rendered under *Recently used* in `index.html`). `audio.profiles[]` (each: `name`, `icon` emoji, `sink` = a stable PipeWire/Pulse sink *name* from `pactl list short sinks`, optional `default`) and `audio.selected` (the active profile name, rewritten by `POST /set-audio` — like `recents`, edits there are overwritten at runtime). The box exposes two output profiles: **SMSL DAC** (the external USB DAC, the default) and **HDMI** (the built-in PCI card's HDMI output — note the "Built-in Audio" card *is* the HDMI device, so there's no separate analog "built-in" sink). Deployed by `vm/provision.sh` (copied into `~/launcher/`, same as `apps.json`).
 
 #### Focus-or-launch and `match` selectors
 

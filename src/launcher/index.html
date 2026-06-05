@@ -218,6 +218,54 @@
   }
   .recent-pill .rp-icon { font-size: 16px; }
 
+  /* ─── System section (audio profile, …) ─── */
+  #system-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .sys-group-label {
+    font-size: 13px;
+    color: var(--text3);
+    margin-right: 4px;
+  }
+  .audio-opt {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px; color: var(--text2);
+    cursor: pointer; outline: none;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .audio-opt:hover { border-color: var(--accent); color: var(--text); }
+  .audio-opt.focused {
+    border-color: var(--accent);
+    color: var(--text);
+    box-shadow: var(--focus-ring);
+  }
+  .audio-opt .ao-icon { font-size: 16px; }
+  .audio-opt .ao-radio {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--text3);
+    flex-shrink: 0;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .audio-opt.selected {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--bg3);
+  }
+  .audio-opt.selected .ao-radio {
+    border-color: var(--accent);
+    background: var(--accent);
+    box-shadow: inset 0 0 0 2px var(--bg3);
+  }
+
   /* ─── Status bar ─── */
   .statusbar {
     margin-top: auto;
@@ -300,6 +348,9 @@
   <div class="section-label">Recently used</div>
   <div id="recents-row"></div>
 
+  <div class="section-label" id="system-label">System</div>
+  <div id="system-row"></div>
+
   <div class="statusbar">
     <div class="nav-hints">
       <span class="hint"><span class="key">↑↓←→</span> Navigate</span>
@@ -321,8 +372,10 @@
 const BRIDGE = 'http://127.0.0.1:9234';
 let allApps = [];
 let config = {};
+let system = {};
+let audioProfiles = [];
 let focusIdx = -1;
-let focusZone = 'grid'; // 'grid' | 'recents'
+let focusZone = 'grid'; // 'grid' | 'recents' | 'system'
 let cols = 6;
 
 // ─── Load config from bridge server ───────────────────────────
@@ -336,6 +389,7 @@ async function loadConfig() {
     document.documentElement.style.setProperty('--cols', cols);
     renderTiles(allApps);
     renderRecents(data.recents || []);
+    loadSystem();
   } catch (e) {
     showToast('Could not reach bridge server. Is server.py running?');
     // Fallback: show placeholder tiles
@@ -390,6 +444,69 @@ function renderRecents(recentNames) {
     pill.addEventListener('focus', () => { focusZone = 'recents'; focusIdx = i; highlightRecent(i); });
     row.appendChild(pill);
   });
+}
+
+// ─── System section (audio profile) ───────────────────────────
+async function loadSystem() {
+  try {
+    const res = await fetch(`${BRIDGE}/system`);
+    system = await res.json();
+    audioProfiles = system.audio?.profiles || [];
+    renderSystem();
+  } catch (e) {
+    // System section just stays empty if /system is unavailable.
+  }
+}
+
+function renderSystem() {
+  const row = document.getElementById('system-row');
+  row.innerHTML = '';
+  if (!audioProfiles.length) {
+    document.getElementById('system-label').style.display = 'none';
+    return;
+  }
+  document.getElementById('system-label').style.display = '';
+  const label = document.createElement('span');
+  label.className = 'sys-group-label';
+  label.textContent = 'Audio profile';
+  row.appendChild(label);
+
+  const selected = system.audio?.selected;
+  audioProfiles.forEach((p, i) => {
+    const opt = document.createElement('div');
+    opt.className = 'audio-opt' + (p.name === selected ? ' selected' : '');
+    opt.setAttribute('tabindex', '0');
+    opt.setAttribute('role', 'radio');
+    opt.setAttribute('aria-checked', p.name === selected ? 'true' : 'false');
+    opt.dataset.name = p.name;
+    opt.innerHTML = `<span class="ao-radio"></span><span class="ao-icon">${p.icon || '🔊'}</span>${p.name}`;
+    opt.addEventListener('click', () => setAudio(p));
+    opt.addEventListener('focus', () => { focusZone = 'system'; focusIdx = i; highlightAudio(i); });
+    row.appendChild(opt);
+  });
+}
+
+async function setAudio(profile) {
+  if (system.audio?.selected === profile.name) return;
+  const prev = system.audio?.selected;
+  system.audio.selected = profile.name;   // optimistic
+  renderSystem();
+  if (focusZone === 'system') highlightAudio(focusIdx);
+  showToast(`Audio → ${profile.name}…`);
+  try {
+    const res = await fetch(`${BRIDGE}/set-audio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: profile.name })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`Audio output: ${profile.name}`);
+  } catch (e) {
+    system.audio.selected = prev;          // revert on failure
+    renderSystem();
+    if (focusZone === 'system') highlightAudio(focusIdx);
+    showToast(`Could not switch audio to ${profile.name}`);
+  }
 }
 
 // ─── Launch ────────────────────────────────────────────────────
@@ -461,10 +578,18 @@ document.getElementById('search').addEventListener('input', e => {
 // ─── Focus helpers ─────────────────────────────────────────────
 function getTiles() { return [...document.querySelectorAll('.tile')]; }
 function getPills() { return [...document.querySelectorAll('.recent-pill')]; }
+function getAudioOpts() { return [...document.querySelectorAll('.audio-opt')]; }
 
 function clearFocus() {
   getTiles().forEach(t => t.classList.remove('focused'));
   getPills().forEach(p => p.classList.remove('focused'));
+  getAudioOpts().forEach(o => o.classList.remove('focused'));
+}
+
+function highlightAudio(idx) {
+  clearFocus();
+  const opts = getAudioOpts();
+  if (idx >= 0 && idx < opts.length) opts[idx].classList.add('focused');
 }
 
 function highlightTile(idx) {
@@ -488,6 +613,7 @@ function highlightRecent(idx) {
 document.addEventListener('keydown', e => {
   const tiles = getTiles();
   const pills = getPills();
+  const opts = getAudioOpts();
   const search = document.getElementById('search');
 
   if (e.key === 'Escape') {
@@ -511,6 +637,8 @@ document.addEventListener('keydown', e => {
       tiles[focusIdx].click();
     } else if (focusZone === 'recents' && focusIdx >= 0 && focusIdx < pills.length) {
       pills[focusIdx].click();
+    } else if (focusZone === 'system' && focusIdx >= 0 && focusIdx < opts.length) {
+      opts[focusIdx].click();
     }
     return;
   }
@@ -524,11 +652,11 @@ document.addEventListener('keydown', e => {
     else if (e.key === 'ArrowDown') {
       if (focusIdx + cols < total) next = focusIdx + cols;
       else if (pills.length) { focusZone = 'recents'; focusIdx = 0; highlightRecent(0); return; }
+      else if (opts.length) { focusZone = 'system'; focusIdx = 0; highlightAudio(0); return; }
     }
     else if (e.key === 'ArrowUp') next = focusIdx - cols >= 0 ? focusIdx - cols : focusIdx;
     focusZone = 'grid'; focusIdx = next; highlightTile(next);
-  } else {
-    // recents row
+  } else if (focusZone === 'recents') {
     if (e.key === 'ArrowRight') { focusIdx = Math.min(focusIdx + 1, pills.length - 1); highlightRecent(focusIdx); }
     else if (e.key === 'ArrowLeft') { focusIdx = Math.max(focusIdx - 1, 0); highlightRecent(focusIdx); }
     else if (e.key === 'ArrowUp') {
@@ -536,6 +664,17 @@ document.addEventListener('keydown', e => {
       const tileRow = Math.floor((getTiles().length - 1) / cols) * cols;
       focusIdx = Math.min(tileRow + focusIdx, getTiles().length - 1);
       highlightTile(focusIdx);
+    }
+    else if (e.key === 'ArrowDown') {
+      if (opts.length) { focusZone = 'system'; focusIdx = 0; highlightAudio(0); }
+    }
+  } else {
+    // system row (audio profile)
+    if (e.key === 'ArrowRight') { focusIdx = Math.min(focusIdx + 1, opts.length - 1); highlightAudio(focusIdx); }
+    else if (e.key === 'ArrowLeft') { focusIdx = Math.max(focusIdx - 1, 0); highlightAudio(focusIdx); }
+    else if (e.key === 'ArrowUp') {
+      if (pills.length) { focusZone = 'recents'; focusIdx = Math.min(focusIdx, pills.length - 1); highlightRecent(focusIdx); }
+      else { focusZone = 'grid'; focusIdx = 0; highlightTile(0); }
     }
     else if (e.key === 'ArrowDown') { /* already at bottom */ }
   }

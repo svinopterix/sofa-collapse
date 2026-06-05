@@ -18,6 +18,10 @@ LAUNCHER_DIR = Path(__file__).parent.resolve()
 # Apps file defaults to apps.json next to this script. Override with the
 # LAUNCHER_APPS env var (e.g. apps.dev.json) for local/VM testing.
 APPS_JSON = Path(os.environ.get("LAUNCHER_APPS", LAUNCHER_DIR / "apps.json"))
+# System settings (audio output profile, ...) live in system.json next to this
+# script; override with LAUNCHER_SYSTEM. Unlike apps.json this is small and only
+# the launcher's System section reads/writes it.
+SYSTEM_JSON = Path(os.environ.get("LAUNCHER_SYSTEM", LAUNCHER_DIR / "system.json"))
 
 # --- Global UI state --------------------------------------------------------
 # Tracks what the box is currently showing so behaviour can branch on it later.
@@ -34,6 +38,54 @@ def set_state(view, app=None):
     STATE["app"] = app
     label = f"{view} ({app})" if app else view
     print(f"[launcher] state -> {label}", file=sys.stderr)
+
+
+def set_audio_sink(sink):
+    """Make `sink` (a stable PipeWire/Pulse sink *name*) the default output for
+    all apps, and move any already-playing streams over so the switch is
+    immediate rather than only affecting new streams. Uses `pactl` (stable by
+    name; `wpctl set-default` needs unstable numeric node IDs). Returns True on
+    success. Requires the bridge to share the user's audio session — on a normal
+    boot it inherits XDG_RUNTIME_DIR from Sway; restarting from a bare SSH shell
+    may strip it (same gotcha as SWAYSOCK for focus-or-launch)."""
+    try:
+        r = subprocess.run(["pactl", "set-default-sink", sink],
+                            capture_output=True, text=True, timeout=4)
+        if r.returncode != 0:
+            print(f"[launcher] set-default-sink failed: {r.stderr.strip()}",
+                  file=sys.stderr)
+            return False
+        # Move existing playback streams to the new default (set-default-sink
+        # only redirects future ones on its own).
+        inputs = subprocess.run(["pactl", "list", "short", "sink-inputs"],
+                                capture_output=True, text=True, timeout=4)
+        for line in inputs.stdout.splitlines():
+            sid = line.split("\t", 1)[0].strip()
+            if sid:
+                subprocess.run(["pactl", "move-sink-input", sid, sink],
+                               capture_output=True, text=True, timeout=4)
+        print(f"[launcher] audio default -> {sink}", file=sys.stderr)
+        return True
+    except Exception as e:
+        print(f"[launcher] set_audio_sink error: {e}", file=sys.stderr)
+        return False
+
+
+def apply_saved_audio():
+    """On startup, re-assert the persisted audio profile so SMSL (the stored
+    default) is in front after a reboot regardless of what PipeWire last chose.
+    Best-effort: never fatal if the file is missing or the session has no audio
+    yet."""
+    try:
+        data = json.loads(SYSTEM_JSON.read_text())
+        audio = data.get("audio", {})
+        name = audio.get("selected")
+        profile = next((p for p in audio.get("profiles", [])
+                        if p.get("name") == name), None)
+        if profile:
+            set_audio_sink(profile["sink"])
+    except Exception as e:
+        print(f"[launcher] apply_saved_audio skipped: {e}", file=sys.stderr)
 
 class LauncherHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -56,6 +108,19 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/apps":
             try:
                 data = APPS_JSON.read_text()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(data.encode())
+            except Exception as e:
+                self._error(str(e))
+            return
+
+        # Serve system.json (audio profiles + current selection) to the frontend
+        if parsed.path == "/system":
+            try:
+                data = SYSTEM_JSON.read_text()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_cors()
@@ -140,6 +205,30 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
                 self._error(str(e))
             return
 
+        if parsed.path == "/set-audio":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                req = json.loads(body)
+                name = req.get("name", "").strip()
+                data = json.loads(SYSTEM_JSON.read_text())
+                profiles = data.get("audio", {}).get("profiles", [])
+                profile = next((p for p in profiles if p.get("name") == name), None)
+                if profile is None:
+                    self._error(f"unknown audio profile: {name!r}")
+                    return
+                if not set_audio_sink(profile["sink"]):
+                    self._error(f"failed to switch audio to {name!r}")
+                    return
+                # Persist the selection so it survives a bridge restart and is
+                # re-applied on next boot (see apply_saved_audio).
+                data["audio"]["selected"] = name
+                SYSTEM_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+                self._ok({"status": "switched", "selected": name})
+            except Exception as e:
+                self._error(str(e))
+            return
+
         self._error("not found", 404)
 
     def _focus_window(self, match):
@@ -174,6 +263,7 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    apply_saved_audio()
     server = http.server.HTTPServer(("127.0.0.1", PORT), LauncherHandler)
     print(f"[launcher] bridge server listening on http://127.0.0.1:{PORT}", file=sys.stderr)
     try:

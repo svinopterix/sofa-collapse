@@ -1,0 +1,9 @@
+{
+  "audio": {
+    "selected": "SMSL DAC",
+    "profiles": [
+      { "name": "SMSL DAC", "icon": "🎧", "sink": "alsa_output.usb-SMSL_SMSL_USB_AUDIO-00.analog-stereo", "default": true },
+      { "name": "HDMI",     "icon": "📺", "sink": "alsa_output.pci-0000_00_1f.3.hdmi-stereo" }
+    ]
+  }
+}
