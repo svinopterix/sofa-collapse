@@ -146,7 +146,7 @@ chmod +x "$LAUNCHER_DST/go-home.sh"
 # (MPRIS), wtype (key injection) and swaymsg, all installed/present above.
 cat > "$LAUNCHER_DST/media-seek.sh" <<'SEEK'
 #!/usr/bin/env bash
-# Usage: media-seek.sh playpause|fwd|back
+# Usage: media-seek.sh playpause|fwd|back|cancel
 #
 # Routes a remote media key to whatever app is actually on screen, decided by
 # the *focused* Sway window. We deliberately do NOT use the bridge's /state:
@@ -159,9 +159,19 @@ cat > "$LAUNCHER_DST/media-seek.sh" <<'SEEK'
 #   YouTube (chromium --app, chrome-www.youtube..)  -> YouTube hotkeys via wtype
 #                                                      (k = play/pause, l = +10s,
 #                                                       j = -10s)
+#   mpv (native Wayland, app_id="mpv")              -> mpv hotkeys via wtype
+#                                                      (space = pause, Right/Left
+#                                                       = seek +/-5s). mpv has no
+#                                                      MPRIS in the Flatpak, so it
+#                                                      must be driven by keys.
 #   anything else (launcher/HOME/unknown)           -> the MPRIS player that is
 #                                                      currently Playing, else
 #                                                      playerctl's default
+#
+# The `cancel` action is the remote Back button: in mpv it sends Escape (closes
+# an open uosc menu; a no-menu Escape is neutralised by `ESC ignore` in mpv's
+# input.conf so it can't un-fullscreen the player); everywhere else it's
+# browser-Back (Alt+Left), exactly what the old standalone XF86Back binding did.
 #
 # wtype needs WAYLAND_DISPLAY and swaymsg needs SWAYSOCK. A remote keybinding
 # normally inherits both from Sway, but derive them if missing so this also
@@ -191,6 +201,16 @@ playing_player() {
   done < <(playerctl -l 2>/dev/null)
 }
 
+# Back button: close mpv's uosc menu (Escape), else browser-Back (Alt+Left).
+if [ "$action" = "cancel" ]; then
+  if [ "$focus_app_id" = "mpv" ]; then
+    wtype -k Escape
+  else
+    wtype -M alt -k Left -m alt
+  fi
+  exit 0
+fi
+
 if [ "$focus_class" = "Spotify" ]; then
   case "$action" in
     playpause) playerctl --player=spotify play-pause ;;
@@ -202,6 +222,12 @@ elif [ "$focus_app_id" = "chrome-www.youtube.com__-Default" ]; then
     playpause) wtype k ;;
     fwd)       wtype l ;;
     back)      wtype j ;;
+  esac
+elif [ "$focus_app_id" = "mpv" ]; then
+  case "$action" in
+    playpause) wtype -k space ;;
+    fwd)       wtype -k Right ;;
+    back)      wtype -k Left ;;
   esac
 else
   p="$(playing_player)"
