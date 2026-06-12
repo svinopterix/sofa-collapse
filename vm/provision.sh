@@ -59,7 +59,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
   jq curl wget gnupg ca-certificates apt-transport-https \
   fonts-noto-core fonts-noto-color-emoji \
   language-pack-ru \
-  pipewire pipewire-pulse pipewire-audio wireplumber pulseaudio-utils
+  pipewire pipewire-pulse pipewire-audio wireplumber pulseaudio-utils \
+  udisks2 udiskie
 
 # A minimal Sway install ships no sound server, so launched apps (Spotify, Jellyfin)
 # have nothing to play through. Enable the PipeWire user services so they start
@@ -81,6 +82,18 @@ for app_script in "$APPS_INSTALL"/*.sh; do
   bash "$app_script"
 done
 shopt -u nullglob
+
+# --- 2b. Let Flatpak media apps read auto-mounted USB drives ----------------
+# udiskie (started from the Sway config) mounts USB drives under
+# /run/media/$USER/<label>, but Flatpak apps (mpv, VLC, Jellyfin) are sandboxed
+# and can't see paths outside their granted filesystem set. Grant every Flatpak
+# read access to the mount root so a plugged-in drive's media is browsable. A
+# user-level override (no sudo) applied globally; idempotent.
+log "Granting Flatpak apps read access to USB mount root (/run/media/$USER)"
+if command -v flatpak >/dev/null 2>&1; then
+  flatpak override --user "--filesystem=/run/media/$USER:ro" || \
+    warn "Could not set Flatpak filesystem override (no Flatpak apps yet?)."
+fi
 
 # --- 3. Deploy the launcher (bridge + UI) -----------------------------------
 log "Deploying launcher to $LAUNCHER_DST"
@@ -305,6 +318,16 @@ workspace_layout stacking
 # Xwayland apps (which have no app_id).
 for_window [app_id=".+"] fullscreen enable
 for_window [shell="xwayland"] fullscreen enable
+
+# Auto-mount USB-attached drives. udiskie watches udisks2 and mounts removable
+# media — both drives already plugged in at login and any hot-plugged after —
+# under /run/media/\$USER/<label>, with no file-manager/desktop needed. udisks2's
+# polkit rules grant the active local (tty1 autologin) session mount rights
+# without a password. --no-tray (this kiosk has no tray/status bar) and
+# --no-notify (no notification daemon runs here) keep it headless; -a forces
+# automount on. The Flatpak media apps are granted read access to the mount root
+# in provision.sh (step 2b) so they can actually browse the drives.
+exec udiskie --no-tray --no-notify --automount
 
 # Launch the launcher kiosk on Sway start.
 exec "\$HOME/launcher/start-kiosk.sh"

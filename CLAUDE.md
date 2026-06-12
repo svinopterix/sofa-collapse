@@ -58,6 +58,7 @@ Verified selectors against the live `swaymsg -t get_tree` on the media box (host
 | Spotify | Xwayland | `null` | `class="Spotify"` |
 | Jellyfin Desktop | Flatpak (native Wayland) | `org.jellyfin.JellyfinDesktop` | `app_id="org.jellyfin.JellyfinDesktop"` (launched via `flatpak run org.jellyfin.JellyfinDesktop`; native Wayland app — verified `app_id` on the box, title is `Jellyfin`) |
 | YouTube tile | Chromium `--app` | `chrome-www.youtube.com__-Default` | `app_id="chrome-www.youtube.com__-Default"` |
+| VK tile | Chromium `--app` | `chrome-vk.com__-Default` | `app_id="chrome-vk.com__-Default"` (launched via `chromium --kiosk --app=https://vk.com`; same per-URL `app_id` scheme as the YouTube tile, host `vk.com`. Reuses the Chromium install — no separate installer. **Derived from the URL host, not yet confirmed against a live window** — verify with `swaymsg -t get_tree` per *Adding an app* step 3 if focus-or-launch piles up duplicates) |
 | Google Chrome | — | `google-chrome` | `app_id="google-chrome"` |
 | Launcher kiosk | Chromium snap `--app` | `chrome-127.0.0.1__-Default` | matched by title `"TV Launcher"` in go-home.sh |
 | VLC | Flatpak (Qt5 → Xwayland) | `null` | `class="vlc"` (launched via `flatpak run org.videolan.VLC`; Qt5 app runs under Xwayland, so `app_id=null` — match by `class`; verified lowercase `vlc`, *not* capitalized) |
