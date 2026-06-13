@@ -1,13 +1,34 @@
 # sofa-collapse
 
-A couch/TV-friendly application launcher for a Linux media-center box.
+`sofa-collapse` turns a mini-PC into a minimalist, TV-connected media center.
+The guiding ideas:
 
-`sofa-collapse` turns an Ubuntu machine wired to a TV into a 10-foot appliance:
-on boot it drops straight into a fullscreen launcher you drive with a remote or a
-gamepad, and from there you start Spotify, Jellyfin, YouTube, mpv, VLC, Chrome, etc.
-No desktop, no mouse — just tiles on a TV.
+- **TV- and remote-optimized** — a 10-foot fullscreen launcher you drive entirely
+  with a remote (or gamepad); no desktop, no mouse, just tiles on a TV.
+- **Quality audio** — switchable audio profiles so you can route playback to a
+  proper USB DAC instead of whatever's wired by default.
+- **Local *and* streaming video** — play files off local storage *and* launch
+  streaming apps (YouTube, Jellyfin, etc.) from the same place.
+- **Thin by design** — a stdlib Python bridge plus one static HTML page, not a
+  heavyweight media-center stack to install and babysit.
 
-![the launcher](vm/media/boot_splash.png)
+
+The launcher home screen on the box:
+
+![the launcher home screen](vm/media/launcher.png)
+
+
+## My hardware
+
+The box this runs on:
+
+| Part | Model |
+| --- | --- |
+| Mini-PC | **GMKtec G3 Pro** |
+| OS | **Ubuntu 26.04 LTS** (Resolute Raccoon), Sway/Wayland kiosk |
+| Remote | **Rii mini i25** (the Home + media keys are bound in Sway) |
+| Audio | **SMSL SU-1** USB DAC (the default `SMSL DAC` audio profile; HDMI is the alternate) |
+
 
 ## Install & run
 
@@ -40,6 +61,7 @@ remote / gamepad ──▶ Chromium kiosk (index.html) ──HTTP──▶ bridg
 ```
 
 ## Repo layout
+
 
 | Path | What it is |
 | --- | --- |
