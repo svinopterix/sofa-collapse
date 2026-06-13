@@ -177,13 +177,22 @@ cat > "$LAUNCHER_DST/media-seek.sh" <<'SEEK'
 #                                                       = seek +/-5s). mpv has no
 #                                                      MPRIS in the Flatpak, so it
 #                                                      must be driven by keys.
+#   Kodi (native Wayland, app_id="Kodi")            -> Kodi JSON-RPC HTTP API
+#                                                      (Input.ExecuteAction:
+#                                                      playpause, stepforward,
+#                                                      stepback). NOT wtype:
+#                                                      wtype's virtual keyboard
+#                                                      crashes Kodi's Wayland
+#                                                      input pump (mmap failed
+#                                                      -> Kodi exits).
 #   anything else (launcher/HOME/unknown)           -> the MPRIS player that is
 #                                                      currently Playing, else
 #                                                      playerctl's default
 #
 # The `cancel` action is the remote Back button: in mpv it sends Escape (closes
 # an open uosc menu; a no-menu Escape is neutralised by `ESC ignore` in mpv's
-# input.conf so it can't un-fullscreen the player); everywhere else it's
+# input.conf so it can't un-fullscreen the player); in Kodi it calls JSON-RPC
+# Input.ExecuteAction "back" (Kodi's own Back/parent-menu); everywhere else it's
 # browser-Back (Alt+Left), exactly what the old standalone XF86Back binding did.
 #
 # wtype needs WAYLAND_DISPLAY and swaymsg needs SWAYSOCK. A remote keybinding
@@ -214,10 +223,24 @@ playing_player() {
   done < <(playerctl -l 2>/dev/null)
 }
 
-# Back button: close mpv's uosc menu (Escape), else browser-Back (Alt+Left).
+kodi_action() {
+  # Drive Kodi via its JSON-RPC HTTP API, NOT wtype. wtype's virtual-keyboard
+  # protocol crashes Kodi's Wayland input pump ("mmap failed: Invalid argument"
+  # -> Kodi exits), so synthetic keys are unusable for it. The web server is
+  # enabled (services.webserver) with Basic auth kodi:kodi on :8080 by
+  # apps/available/kodi.sh. $1 is a Kodi action id (playpause/stepforward/...).
+  curl -fsS --max-time 2 -u kodi:kodi -H 'Content-Type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"Input.ExecuteAction\",\"params\":{\"action\":\"$1\"}}" \
+    http://127.0.0.1:8080/jsonrpc >/dev/null 2>&1
+}
+
+# Back button: close mpv's uosc menu (Escape), Kodi's own Back (Backspace),
+# else browser-Back (Alt+Left).
 if [ "$action" = "cancel" ]; then
   if [ "$focus_app_id" = "mpv" ]; then
     wtype -k Escape
+  elif [ "$focus_app_id" = "Kodi" ]; then
+    kodi_action back
   else
     wtype -M alt -k Left -m alt
   fi
@@ -241,6 +264,14 @@ elif [ "$focus_app_id" = "mpv" ]; then
     playpause) wtype -k space ;;
     fwd)       wtype -k Right ;;
     back)      wtype -k Left ;;
+  esac
+elif [ "$focus_app_id" = "Kodi" ]; then
+  # Native Wayland, app_id="Kodi" (capitalized). Driven by JSON-RPC, NOT wtype
+  # (wtype crashes Kodi's Wayland input pump). See kodi_action above.
+  case "$action" in
+    playpause) kodi_action playpause ;;
+    fwd)       kodi_action stepforward ;;
+    back)      kodi_action stepback ;;
   esac
 else
   p="$(playing_player)"

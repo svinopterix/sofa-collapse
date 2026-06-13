@@ -40,6 +40,26 @@ def set_state(view, app=None):
     print(f"[launcher] state -> {label}", file=sys.stderr)
 
 
+def find_app(name):
+    """Look up an app object in apps.json by name. apps.json is the single
+    source of truth for cmd/match, so the bridge resolves them server-side
+    rather than trusting the POST body: a frontend page loaded before a
+    redeploy keeps an outdated match, and an outdated match silently fails
+    focus-or-launch and piles up duplicate windows (e.g. a stale lowercase
+    app_id="kodi" vs the live window's app_id="Kodi"). Returns the app dict,
+    or None if not found / unreadable."""
+    if not name:
+        return None
+    try:
+        data = json.loads(APPS_JSON.read_text())
+        for app in data.get("apps", []):
+            if app.get("name") == name:
+                return app
+    except Exception as e:
+        print(f"[launcher] find_app error: {e}", file=sys.stderr)
+    return None
+
+
 def set_audio_sink(sink):
     """Make `sink` (a stable PipeWire/Pulse sink *name*) the default output for
     all apps, and move any already-playing streams over so the switch is
@@ -158,6 +178,14 @@ class LauncherHandler(http.server.BaseHTTPRequestHandler):
                 cmd = req.get("cmd", "").strip()
                 match = req.get("match", "").strip()
                 name = req.get("name", "").strip()
+                # apps.json is authoritative: prefer its cmd/match over the
+                # (possibly stale) values the frontend posted, so an outdated
+                # page can't bypass focus-or-launch and spawn duplicates. Fall
+                # back to the posted values only for an app not in apps.json.
+                app = find_app(name)
+                if app:
+                    cmd = (app.get("cmd") or "").strip() or cmd
+                    match = (app.get("match") or "").strip()
                 if not cmd:
                     self._error("missing cmd")
                     return

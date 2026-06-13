@@ -55,6 +55,35 @@ flatpak override --user --filesystem="${MEDIA_PATH%/}" "$KODI_FLATPAK_ID" \
 
 mkdir -p "$KODI_USERDATA"
 
+# Enable Kodi's JSON-RPC HTTP server. The launcher's remote media keys
+# (media-seek.sh) drive Kodi through this API instead of synthetic keystrokes:
+# wtype's Wayland virtual-keyboard protocol crashes Kodi's input pump
+# ("Exception in Wayland message pump, exiting: mmap failed" -> Kodi quits), so
+# JSON-RPC is the only reliable way to send it play/pause/seek. Basic auth
+# kodi:kodi on :8080 — the web server binds all interfaces, so the password
+# (weak, but present) is the only guard; fine for a single-user box on a
+# trusted LAN, consistent with the rest of this appliance's threat model.
+# Settings live in guisettings.xml, which Kodi rewrites on exit, so this must
+# run while Kodi is STOPPED (true at provision time). Idempotent: patches the
+# keys in place if the file exists, else creates a minimal one Kodi fills out.
+log "Enabling Kodi JSON-RPC web server (port 8080, user kodi)"
+KODI_USERDATA="$KODI_USERDATA" python3 - <<'PY' || warn "could not seed Kodi web-server settings; enable it in Settings > Services > Control"
+import os, re
+p = os.path.join(os.environ["KODI_USERDATA"], "guisettings.xml")
+s = open(p).read() if os.path.exists(p) else '<settings version="2">\n</settings>\n'
+def setval(s, sid, val):
+    pat = re.compile(r'<setting id="%s"[^>]*?(?:/>|>.*?</setting>)' % re.escape(sid))
+    repl = '<setting id="%s">%s</setting>' % (sid, val)
+    return pat.sub(repl, s, count=1) if pat.search(s) \
+        else s.replace('</settings>', '    %s\n</settings>' % repl)
+for sid, val in [("services.webserver", "true"), ("services.webserverport", "8080"),
+                 ("services.webserverauthentication", "true"),
+                 ("services.webserverusername", "kodi"), ("services.webserverpassword", "kodi")]:
+    s = setval(s, sid, val)
+open(p, "w").write(s)
+print("  guisettings.xml: web server enabled")
+PY
+
 # sources.xml — point Videos / Music / Pictures / Files at the media path.
 if [ ! -f "$KODI_USERDATA/sources.xml" ]; then
   log "Writing $KODI_USERDATA/sources.xml (Media -> $MEDIA_PATH)"
