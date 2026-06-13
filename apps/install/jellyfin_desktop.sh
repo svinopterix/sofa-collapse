@@ -1,1 +1,0 @@
-../available/jellyfin_desktop.sh
