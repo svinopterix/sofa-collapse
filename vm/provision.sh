@@ -471,10 +471,41 @@ sprite.SetX(screen_width  / 2 - splash.GetWidth()  / 2);
 sprite.SetY(screen_height / 2 - splash.GetHeight() / 2);
 SCRIPT
 
+  # Plymouth only draws a *graphical* splash if a KMS/DRM framebuffer is up
+  # EARLY — i.e. the GPU's DRM driver has to be inside the initramfs. This box
+  # uses dracut in host-only mode, and dracut does NOT pull the GPU driver into
+  # the initramfs by default. Without it, Plymouth silently falls back to TEXT
+  # mode: no splash, and the raw boot console shows through — including the
+  # benign, unconditional dracut "Kernel command line option 'copymods' is
+  # deprecated" warning (printed every boot by Ubuntu's copymods dracut module,
+  # regardless of the cmdline). Forcing the in-use DRM driver in fixes the splash
+  # and, by covering the console, hides that warning. Detect the driver from the
+  # live GPU so this isn't hardcoded to one machine (here: i915, Intel CometLake).
+  DRM_DRIVERS="$(for d in /sys/class/drm/card[0-9]*/device/driver; do
+                   [ -e "$d" ] && basename "$(readlink -f "$d")"
+                 done | sort -u | paste -sd' ' -)"
+  if [ -n "$DRM_DRIVERS" ]; then
+    if command -v dracut >/dev/null 2>&1; then
+      log "Forcing DRM driver(s) into initramfs (dracut): $DRM_DRIVERS"
+      sudo install -d /etc/dracut.conf.d
+      printf 'force_drivers+=" %s "\n' "$DRM_DRIVERS" \
+        | sudo tee /etc/dracut.conf.d/10-sofa-drm.conf >/dev/null
+    else
+      log "Adding DRM driver(s) to initramfs-tools modules: $DRM_DRIVERS"
+      for m in $DRM_DRIVERS; do
+        grep -qxF "$m" /etc/initramfs-tools/modules 2>/dev/null \
+          || echo "$m" | sudo tee -a /etc/initramfs-tools/modules >/dev/null
+      done
+    fi
+  else
+    warn "Could not detect a DRM driver; Plymouth splash may fall back to text mode."
+  fi
+
   # Make sofa-splash the default theme and rebuild the initramfs so it's present
   # early at boot. Newer Ubuntu (plymouth 24.x) dropped the plymouth-set-default-theme
   # helper, so select the theme via update-alternatives on default.plymouth; fall
-  # back to the old helper if it's still around (older releases).
+  # back to the old helper if it's still around (older releases). The rebuild here
+  # is also what bakes the DRM driver forced just above into the initramfs.
   if command -v plymouth-set-default-theme >/dev/null 2>&1; then
     sudo plymouth-set-default-theme -R sofa-splash
   else
