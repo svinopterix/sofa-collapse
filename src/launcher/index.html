@@ -132,10 +132,15 @@
     display: flex;
     flex-wrap: nowrap;
     gap: 20px;
-    /* vertical padding leaves room for the focus scale/glow that would
-       otherwise be clipped by overflow-y:hidden (needed once overflow-x is auto) */
-    padding: 8px 0 12px;
-    margin-bottom: 12px;
+    /* Padding leaves room for the focus scale/glow that overflow:hidden would
+       otherwise clip — vertically, and horizontally for the first/last tiles
+       (the focused left tile's ring was clipped at the container edge). The
+       negative horizontal margin pulls the row's edges back out by the same
+       amount so the first tile still lines up with the "APPS"/"RECENTLY USED"
+       labels; the clip now happens 16px out, past the glow. */
+    padding: 8px 16px 12px;
+    margin: 0 -16px 12px;
+    scroll-padding: 0 16px;
     flex-shrink: 0;
     overflow-x: auto;
     overflow-y: hidden;

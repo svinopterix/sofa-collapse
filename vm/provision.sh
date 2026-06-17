@@ -4,7 +4,9 @@
 #
 # Turn a CLEAN Ubuntu 24.04 LTS install into a Sway-based kiosk running the
 # TV launcher (the bridge server + a Chromium kiosk, with all launcher apps
-# installed: Chromium, Google Chrome, Spotify, Jellyfin Desktop).
+# installed: Chromium, Google Chrome, Spotify, Jellyfin Desktop, Kodi, the
+# FCast receiver). Spotify and the FCast receiver are also auto-started at boot
+# and kept running in the background (see start-background.sh).
 #
 # Run INSIDE the VM, as your normal (non-root) user that has sudo:
 #     ./vm/provision.sh
@@ -285,6 +287,72 @@ fi
 SEEK
 chmod +x "$LAUNCHER_DST/media-seek.sh"
 
+# Always-on background apps (Spotify, FCast receiver). Started once at Sway
+# startup, kept running in the background so they're instantly available — music
+# resumes on the Spotify tile, and the FCast receiver is always listening for a
+# cast from a phone (e.g. Grayjay). Bound to a Sway `exec` line in the config
+# below. See the long comment in the script for why a final launcher raise is
+# needed (the boot-time foreground race).
+cat > "$LAUNCHER_DST/start-background.sh" <<'BGAPPS'
+#!/usr/bin/env bash
+# Start the always-on background apps (Spotify, FCast receiver) at boot, then
+# raise the launcher so the box settles on the Home screen.
+#
+# These apps have *persistent* windows, so they don't fit the launcher's normal
+# "absent until launched" model: each maps a window at boot that the Sway
+# `for_window ... fullscreen enable` rule pulls to the front, and whichever maps
+# *last* would otherwise cover Home. We don't add any extra hiding for them — a
+# backgrounded app living behind the fullscreen launcher is exactly the resting
+# state the remote Home button already produces (go-home.sh). We just wait until
+# every window has finished mapping, then raise the launcher *last* (via
+# go-home.sh), so the box lands on Home with Spotify/FCast stacked behind it,
+# still running. A crashed background app is simply relaunched from its tile
+# (focus-or-launch spawns it fresh) — there is deliberately no respawn here.
+#
+# Running under Sway, this inherits WAYLAND_DISPLAY / SWAYSOCK / XDG_RUNTIME_DIR
+# and the audio env, which the launched apps need — the same env that is missing
+# when the bridge is restarted from a bare SSH shell.
+set -u
+LAUNCHER_DST="$HOME/launcher"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+: "${SWAYSOCK:=$(ls "$XDG_RUNTIME_DIR"/sway-ipc.* 2>/dev/null | head -1)}"
+export SWAYSOCK
+
+# Launch each background app once, detached (setsid) so it outlives this script,
+# which exits as soon as it has raised the launcher. Guarded so a missing app
+# is skipped rather than erroring.
+command -v spotify >/dev/null 2>&1 && setsid spotify >/dev/null 2>&1 &
+flatpak info org.fcast.Receiver >/dev/null 2>&1 \
+  && setsid flatpak run org.fcast.Receiver >/dev/null 2>&1 &
+
+# Wait for windows to stop appearing — i.e. the kiosk and both background apps
+# have all mapped — then raise the launcher last. We count windows (Sway tree
+# nodes that carry a pid) rather than match each app, so this does NOT depend on
+# FCast's app_id (still unverified). Break once the count has been stable for
+# ~1s *and* the launcher window exists; cap at ~20s so a stuck/absent app can't
+# hang the box off Home forever.
+count_windows() {
+  swaymsg -t get_tree 2>/dev/null \
+    | jq '[.. | objects | select(has("pid") and .pid != null)] | length' 2>/dev/null
+}
+launcher_up() {
+  swaymsg -t get_tree 2>/dev/null \
+    | jq -e '.. | objects | select(.name? == "TV Launcher")' >/dev/null 2>&1
+}
+prev=-1; stable=0
+for _ in $(seq 1 100); do
+  n="$(count_windows)"; n="${n:-0}"
+  if [ "$n" = "$prev" ]; then stable=$((stable + 1)); else stable=0; fi
+  [ "$stable" -ge 5 ] && launcher_up && break
+  prev="$n"
+  sleep 0.2
+done
+
+# Raise the launcher last so we boot to Home with the background apps behind it.
+exec "$LAUNCHER_DST/go-home.sh"
+BGAPPS
+chmod +x "$LAUNCHER_DST/start-background.sh"
+
 # --- 4. Sway config: run the kiosk, hide cursor, easy exit ------------------
 log "Writing Sway config"
 mkdir -p "$SWAY_CFG_DIR"
@@ -362,6 +430,12 @@ exec udiskie --no-tray --no-notify --automount
 
 # Launch the launcher kiosk on Sway start.
 exec "\$HOME/launcher/start-kiosk.sh"
+
+# Start the always-on background apps (Spotify, FCast receiver) and then raise
+# the launcher, so the box boots to the home screen with them running behind it
+# (Spotify ready to resume; FCast always listening for a cast). See
+# start-background.sh for why the final raise is needed.
+exec "\$HOME/launcher/start-background.sh"
 
 # Hotkey bindings — generated from src/launcher/keybindings.yaml. Edit that
 # file and re-run vm/provision.sh (or \`swaymsg reload\` after) to change them.
