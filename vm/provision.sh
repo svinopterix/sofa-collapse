@@ -213,9 +213,16 @@ export SWAYSOCK
 # class; chromium --app pages carry a per-URL app_id. jq emits app_id then class
 # (one per line) for the focused node; head -2 guards against odd trees.
 mapfile -t f < <(swaymsg -t get_tree 2>/dev/null \
-  | jq -r '.. | objects | select(.focused==true) | (.app_id // "-"), (.window_properties.class // "-")' \
-  | head -2)
-focus_app_id="${f[0]:--}"; focus_class="${f[1]:--}"
+  | jq -r '.. | objects | select(.focused==true) | (.app_id // "-"), (.window_properties.class // "-"), (.pid // "-")' \
+  | head -3)
+focus_app_id="${f[0]:--}"; focus_class="${f[1]:--}"; focus_pid="${f[2]:--}"
+
+# The FCast receiver (a winit app) sets NO app_id and NO class, and its window
+# title changes to the media name while a cast plays — so none of those identify
+# it during playback (exactly when the media keys are used). Identify it by the
+# focused window's process name instead, which is stable.
+focus_comm=""
+[ "$focus_pid" != "-" ] && focus_comm="$(ps -p "$focus_pid" -o comm= 2>/dev/null | tr -d ' ')"
 
 playing_player() {
   # First MPRIS player reporting Playing; empty if none.
@@ -243,6 +250,8 @@ if [ "$action" = "cancel" ]; then
     wtype -k Escape
   elif [ "$focus_app_id" = "Kodi" ]; then
     kodi_action back
+  elif [ "$focus_comm" = "fcast-receiver" ]; then
+    wtype -k Escape
   else
     wtype -M alt -k Left -m alt
   fi
@@ -274,6 +283,18 @@ elif [ "$focus_app_id" = "Kodi" ]; then
     playpause) kodi_action playpause ;;
     fwd)       kodi_action stepforward ;;
     back)      kodi_action stepback ;;
+  esac
+elif [ "$focus_comm" = "fcast-receiver" ]; then
+  # FCast receiver: native-Wayland winit app, no MPRIS — so it CANNOT be driven
+  # by playerctl, and the generic fallback below would grab the playing MPRIS
+  # player (YouTube/Chromium) instead, which is the "keys control YouTube, not
+  # the cast" bug. Drive it by key injection (wtype) like mpv. NB: the exact
+  # receiver key bindings are UNVERIFIED — confirm against a live cast and adjust
+  # (space/Right/Left are the common player defaults).
+  case "$action" in
+    playpause) wtype -k space ;;
+    fwd)       wtype -k Right ;;
+    back)      wtype -k Left ;;
   esac
 else
   p="$(playing_player)"
@@ -325,11 +346,16 @@ export SWAYSOCK
 export WAYLAND_DISPLAY
 
 # Launch each background app once, detached (setsid) so it outlives this script,
-# which exits as soon as it has raised the launcher. Guarded so a missing app
-# is skipped rather than erroring.
-command -v spotify >/dev/null 2>&1 && setsid spotify >/dev/null 2>&1 &
-flatpak info org.fcast.Receiver >/dev/null 2>&1 \
-  && setsid flatpak run org.fcast.Receiver >/dev/null 2>&1 &
+# which exits as soon as it has raised the launcher. Guarded two ways: skip a
+# missing app, and — crucially — skip one that is *already running* (pgrep on the
+# process name), so a Sway reload or a stray invocation can't pile up a second
+# copy. (The duplicate-FCast bug: this script launched one while a leftover
+# instance was still alive.)
+pgrep -x spotify >/dev/null 2>&1 \
+  || { command -v spotify >/dev/null 2>&1 && setsid spotify >/dev/null 2>&1 & }
+pgrep -x fcast-receiver >/dev/null 2>&1 \
+  || { flatpak info org.fcast.Receiver >/dev/null 2>&1 \
+       && setsid flatpak run org.fcast.Receiver >/dev/null 2>&1 & }
 
 # Wait for windows to stop appearing — i.e. the kiosk and both background apps
 # have all mapped — then raise the launcher last. We count windows (Sway tree
@@ -358,6 +384,70 @@ done
 exec "$LAUNCHER_DST/go-home.sh"
 BGAPPS
 chmod +x "$LAUNCHER_DST/start-background.sh"
+
+# Cast handler: when the FCast receiver starts playing (a phone casts to it),
+# bring it to the foreground and pause everything else; bound to a Sway `exec`
+# in the config below. See the script header for why it watches PipeWire.
+cat > "$LAUNCHER_DST/fcast-watch.sh" <<'FCASTWATCH'
+#!/usr/bin/env bash
+# React to the FCast receiver starting/stopping playback (a phone casting to it):
+# on cast start, pause every other player and bring FCast to the foreground.
+#
+# Detection is via PipeWire, NOT Sway/MPRIS, because none of the obvious signals
+# are reliable (all verified on the box): FCast registers no MPRIS player, never
+# changes its window title, and emits no dependable Sway window event on cast
+# start. What it DOES do while playing is open a PipeWire playback sink-input
+# named "fcast-receiver" — present while casting, gone when it stops. So we
+# subscribe to sink-input changes and act on the rising/falling edge.
+#
+# Bringing FCast to the front is also what makes the remote's media keys work:
+# media-seek.sh routes a key to the *focused* window, and FCast (parked on the
+# hidden "bg" workspace, never focused on its own) was being skipped — the keys
+# fell through to the still-playing YouTube/Chromium player. Focusing FCast here
+# means media-seek.sh then targets it.
+set -u
+LAUNCHER_DST="$HOME/launcher"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+: "${SWAYSOCK:=$(ls "$XDG_RUNTIME_DIR"/sway-ipc.* 2>/dev/null | head -1)}"
+export SWAYSOCK
+
+fcast_playing() {
+  pactl list sink-inputs 2>/dev/null \
+    | grep -q 'application.name = "fcast-receiver"'
+}
+
+surface_fcast() {
+  # Pause other players (YouTube/Chromium, Spotify — FCast has no MPRIS so it is
+  # untouched), then focus FCast by pid so it comes to the foreground regardless
+  # of which workspace it is parked on (and becomes the media-key target).
+  playerctl --all-players pause 2>/dev/null || true
+  local pid
+  pid="$(swaymsg -t get_tree 2>/dev/null \
+    | jq -r '.. | objects | select(.pid? != null and (.name? == "FCast Receiver")) | .pid' \
+    | head -1)"
+  if [ -n "$pid" ] && [ "$pid" != "null" ]; then
+    swaymsg "[pid=$pid] focus" >/dev/null 2>&1
+  else
+    swaymsg '[title="FCast Receiver"] focus' >/dev/null 2>&1
+  fi
+}
+
+# Poll the stream state once a second and act only on a 0->1 transition (cast
+# just started). Polling rather than `pactl subscribe | grep`: subscribe's
+# stdout is block-buffered through a pipe, so low-volume events arrive late or
+# not at all — a 1s poll is robust and the latency is unnoticeable. Cast STOP is
+# intentionally a no-op — FCast just shows its idle screen and the user returns
+# Home with the remote; this also avoids flapping if a stream briefly drops
+# mid-cast. (A paused cast stays a corked sink-input, so pausing isn't a stop.)
+last=0
+while sleep 1; do
+  if fcast_playing; then now=1; else now=0; fi
+  [ "$now" = "$last" ] && continue
+  last="$now"
+  [ "$now" = 1 ] && surface_fcast
+done
+FCASTWATCH
+chmod +x "$LAUNCHER_DST/fcast-watch.sh"
 
 # --- 4. Sway config: run the kiosk, hide cursor, easy exit ------------------
 log "Writing Sway config"
@@ -424,6 +514,19 @@ workspace_layout stacking
 for_window [app_id=".+"] fullscreen enable
 for_window [shell="xwayland"] fullscreen enable
 
+# Always-on background apps (Spotify, FCast receiver) start at boot, but must not
+# flash in front of the launcher while the box comes up (they used to sit in the
+# foreground for several seconds before the launcher was raised). Park them on a
+# dedicated hidden workspace "bg" as their windows map — the rule fires at map
+# time, before the window is shown, so they never appear on the visible
+# workspace. The home screen is then the only thing on workspace 1 at boot.
+# focus-or-launch (their tile) and the cast handler bring them onto the visible
+# workspace on demand: \`[criteria] focus\` switches to whatever workspace the
+# window is on, and go-home.sh switches back. FCast has no app_id/class (winit),
+# so it is matched by title; Spotify is Xwayland, matched by class.
+for_window [title="FCast Receiver"] move container to workspace bg
+for_window [class="Spotify"] move container to workspace bg
+
 # Auto-mount USB-attached drives. udiskie watches udisks2 and mounts removable
 # media — both drives already plugged in at login and any hot-plugged after —
 # under /run/media/\$USER/<label>, with no file-manager/desktop needed. udisks2's
@@ -442,6 +545,10 @@ exec "\$HOME/launcher/start-kiosk.sh"
 # (Spotify ready to resume; FCast always listening for a cast). See
 # start-background.sh for why the final raise is needed.
 exec "\$HOME/launcher/start-background.sh"
+
+# Cast handler: bring FCast to the foreground + pause other players when a phone
+# starts casting to it (detected via its PipeWire stream). See fcast-watch.sh.
+exec "\$HOME/launcher/fcast-watch.sh"
 
 # Hotkey bindings — generated from src/launcher/keybindings.yaml. Edit that
 # file and re-run vm/provision.sh (or \`swaymsg reload\` after) to change them.
