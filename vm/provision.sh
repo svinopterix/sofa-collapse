@@ -317,6 +317,12 @@ LAUNCHER_DST="$HOME/launcher"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 : "${SWAYSOCK:=$(ls "$XDG_RUNTIME_DIR"/sway-ipc.* 2>/dev/null | head -1)}"
 export SWAYSOCK
+# WAYLAND_DISPLAY is inherited from Sway on a normal boot, but derive it if unset
+# so this also works from a bare SSH shell. The FCast receiver (a winit app)
+# hard-errors without it ("neither WAYLAND_DISPLAY nor ... is set"), like mpv's
+# DRM-master fallback — so it must be present before we launch the apps.
+: "${WAYLAND_DISPLAY:=$(basename "$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1)" 2>/dev/null)}"
+export WAYLAND_DISPLAY
 
 # Launch each background app once, detached (setsid) so it outlives this script,
 # which exits as soon as it has raised the launcher. Guarded so a missing app
