@@ -174,6 +174,9 @@ cat > "$LAUNCHER_DST/media-seek.sh" <<'SEEK'
 #   YouTube (chromium --app, chrome-www.youtube..)  -> YouTube hotkeys via wtype
 #                                                      (k = play/pause, l = +10s,
 #                                                       j = -10s)
+#   Kinogo (chromium --app, chrome-kinogo.ec..)     -> generic web-player keys via
+#                                                      wtype (space = play/pause,
+#                                                       Right/Left = seek)
 #   mpv (native Wayland, app_id="mpv")              -> mpv hotkeys via wtype
 #                                                      (space = pause, Right/Left
 #                                                       = seek +/-5s). mpv has no
@@ -269,6 +272,17 @@ elif [ "$focus_app_id" = "chrome-www.youtube.com__-Default" ]; then
     playpause) wtype k ;;
     fwd)       wtype l ;;
     back)      wtype j ;;
+  esac
+elif [ "$focus_app_id" = "chrome-kinogo.ec__-Default" ]; then
+  # Kinogo (chromium --app): a generic HTML5 web video player, NOT YouTube — so
+  # the k/l/j hotkeys don't apply. Drive it with the standard web-player keys via
+  # wtype (space = play/pause, Right/Left = seek). NB UNVERIFIED — confirm against
+  # the live player and adjust (the site may embed the player in an iframe, which
+  # can swallow these unless the player has focus).
+  case "$action" in
+    playpause) wtype -k space ;;
+    fwd)       wtype -k Right ;;
+    back)      wtype -k Left ;;
   esac
 elif [ "$focus_app_id" = "mpv" ]; then
   case "$action" in

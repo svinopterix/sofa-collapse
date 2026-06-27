@@ -7,9 +7,10 @@
   "apps": [
     { "name": "YouTube",  "icon": "📺", "cmd": "chromium --kiosk --app=https://www.youtube.com --ozone-platform=wayland", "accent": "#ff0000", "badge": null, "match": "app_id=\"chrome-www.youtube.com__-Default\"" },
     { "name": "VK",       "icon": "🆅", "cmd": "chromium --kiosk --app=https://vk.com --ozone-platform=wayland", "accent": "#0077ff", "badge": null, "match": "app_id=\"chrome-vk.com__-Default\"" },
-    { "name": "Kinogo",   "icon": "🎞️", "cmd": "chromium --kiosk --app=https://kinogo.ec --ozone-platform=wayland", "accent": "#e50914", "badge": null, "match": "app_id=\"chrome-kinogo.ec__-Default\"" },
     { "name": "Kodi",     "icon": "🎬", "cmd": "flatpak run --filesystem=/run/media tv.kodi.Kodi", "accent": "#17b2e7", "badge": "new", "match": "app_id=\"Kodi\"" },
     { "name": "Spotify",  "icon": "🎵", "cmd": "spotify",          "accent": "#1db954", "badge": null, "match": "class=\"Spotify\"" },
+    { "name": "Kinogo",   "icon": "🎞️", "cmd": "chromium --kiosk --app=https://kinogo.ec --ozone-platform=wayland", "accent": "#e50914", "badge": null, "match": "app_id=\"chrome-kinogo.ec__-Default\"" },
+    { "name": "Cast2TV",  "icon": "📲", "cmd": "chromium --kiosk --app=https://www.cast2tv.io --ozone-platform=wayland", "accent": "#7c3aed", "badge": null, "match": "app_id=\"chrome-www.cast2tv.io__-Default\"" },
     { "name": "FCast",    "icon": "📡", "cmd": "flatpak run org.fcast.Receiver", "accent": "#2563eb", "badge": "new", "match": "title=\"FCast Receiver\"" },
     { "name": "Chrome",   "icon": "🔵", "cmd": "google-chrome",    "accent": "#4285f4", "badge": null, "match": "app_id=\"google-chrome\"" },
     { "name": "Audio",    "icon": "🔊", "cmd": "pavucontrol",      "accent": "#f59e0b", "badge": null, "match": "app_id=\"pavucontrol\"" }
