@@ -1,16 +1,15 @@
 # sofa-collapse
 
-`sofa-collapse` turns a mini-PC into a minimalist, TV-connected media center.
+`sofa-collapse` is a linux-based minimalist TV-launcher.
 The guiding ideas:
 
 - **TV- and remote-optimized** — a 10-foot fullscreen launcher you drive entirely
   with a remote (or gamepad); no desktop, no mouse, just tiles on a TV.
 - **Quality audio** — switchable audio profiles so you can route playback to a
-  proper USB DAC instead of whatever's wired by default.
+  proper USB DAC, HDMI output or whatever.
 - **Local *and* streaming video** — play files off local storage *and* launch
   streaming apps (YouTube, Jellyfin, etc.) from the same place.
-- **Thin by design** — a stdlib Python bridge plus one static HTML page, not a
-  heavyweight media-center stack to install and babysit.
+- **Thin by design** — it's not a media-center; online sources/local files - that's it.
 
 
 The launcher home screen on the box:
